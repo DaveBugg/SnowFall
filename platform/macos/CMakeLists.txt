@@ -8,7 +8,19 @@
 #   snow_mac_tests   unit tests of snow_mac_core                       (ctest: mac_unit)
 #   SnowFall         SnowFall.app (LSUIElement, ad-hoc signed)          (ctest: mac_selftest)
 #   make_dmg         SnowFall-<version>.dmg (part of ALL unless -DSNOW_MAC_DMG=OFF)
-enable_language(OBJC OBJCXX)
+# Swift is needed for the SwiftUI module (platform/macos/ui). CMake compiles Swift only with the
+# Ninja and Xcode generators; Ninja builds one architecture (the root picks the host arch for
+# it), Xcode builds the universal binary (CI). With Unix Makefiles the app is built without UI.
+set(SNOW_MAC_UI OFF)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/CMakeLists.txt" AND CMAKE_GENERATOR MATCHES "Ninja|Xcode")
+  enable_language(OBJC OBJCXX Swift)
+  set(SNOW_MAC_UI ON)
+else()
+  enable_language(OBJC OBJCXX)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ui/CMakeLists.txt")
+    message(WARNING "SnowFall: the SwiftUI module needs -G Ninja or -G Xcode; building the menu-only app.")
+  endif()
+endif()
 
 set(SNOW_MAC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 option(SNOW_MAC_DMG "Build the .dmg as part of the default target" ON)
@@ -25,8 +37,13 @@ find_package(Threads REQUIRED)
 target_link_libraries(snow_diag PUBLIC Threads::Threads)
 
 # ---- pure C++ ----------------------------------------------------------------------------
-# drift_mesh.cpp is the portable tessellator of the Windows renderer, shared as-is.
+# drift_mesh.cpp is the portable tessellator of the Windows renderer, shared as-is. It includes
+# "rendering/d3d11/drift_mesh.h"; a one-line forwarding header in the build tree resolves that
+# without putting platform/windows on the include path (works with every generator).
 set(SNOW_DRIFT_MESH_SRC "${CMAKE_SOURCE_DIR}/platform/windows/rendering/d3d11/drift_mesh.cpp")
+set(SNOW_SHIM_DIR "${CMAKE_CURRENT_BINARY_DIR}/shim")
+file(CONFIGURE OUTPUT "${SNOW_SHIM_DIR}/rendering/d3d11/drift_mesh.h"
+     CONTENT "#include \"@CMAKE_SOURCE_DIR@/platform/windows/rendering/d3d11/drift_mesh.h\"\n" @ONLY)
 add_library(snow_mac_core STATIC
   tracker/desktop_model.cpp tracker/desktop_model.h
   system/hotkey_map.cpp system/hotkey_map.h
@@ -35,8 +52,7 @@ add_library(snow_mac_core STATIC
   render/msl_translate.cpp render/msl_translate.h
   app/icon_render.cpp app/icon_render.h
   "${SNOW_DRIFT_MESH_SRC}")
-set_source_files_properties("${SNOW_DRIFT_MESH_SRC}" PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/platform/windows")
-target_include_directories(snow_mac_core PUBLIC "${SNOW_MAC_DIR}" "${SNOW_CORE_DIR}")
+target_include_directories(snow_mac_core PUBLIC "${SNOW_MAC_DIR}" "${SNOW_CORE_DIR}" PRIVATE "${SNOW_SHIM_DIR}")
 target_link_libraries(snow_mac_core PUBLIC snow_sim snow_settings snow_diag)
 
 # ---- unit tests ----------------------------------------------------------------------------
@@ -68,6 +84,13 @@ file(GLOB snow_mac_app_srcs CONFIGURE_DEPENDS
      "${SNOW_MAC_DIR}/tracker/*.mm"
      "${SNOW_MAC_DIR}/system/*.mm" "${SNOW_MAC_DIR}/system/*.h"
      "${SNOW_MAC_DIR}/bridge/*.h")
+# SwiftUI settings window + quick panel (platform/macos/ui). The shell finds it at run time with
+# NSClassFromString(@"SFUIFactory"); snowfall_ui_attach() (called last, below) links it with
+# -ObjC and keeps the C/C++ flags of the root project away from swiftc.
+if(SNOW_MAC_UI)
+  add_subdirectory(ui)
+endif()
+
 configure_file(packaging/Info.plist.in "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" @ONLY)
 add_executable(SnowFall MACOSX_BUNDLE ${snow_mac_app_srcs} "${SNOW_ICNS}")
 set_target_properties(SnowFall PROPERTIES
@@ -79,18 +102,6 @@ target_link_libraries(SnowFall PRIVATE snow_mac_core snow_sim snow_settings snow
   "-framework CoreGraphics" "-framework IOKit" "-framework Carbon" "-framework ServiceManagement"
   "-framework ApplicationServices")
 
-# SwiftUI settings window + quick panel (platform/macos/ui, owned by the UI work stream).
-# The shell finds it at run time with NSClassFromString(@"SFUIFactory"); -ObjC makes the
-# linker keep the Objective-C-visible Swift classes of a static library.
-if(EXISTS "${SNOW_MAC_DIR}/ui/CMakeLists.txt")
-  add_subdirectory(ui)
-  if(TARGET snowfall_ui)
-    target_link_libraries(SnowFall PRIVATE snowfall_ui)
-    target_link_options(SnowFall PRIVATE "-ObjC")
-    message(STATUS "SnowFall: SwiftUI module linked")
-  endif()
-endif()
-
 # Ad-hoc signature over the finished bundle (no Developer ID; see platform/macos/README.md).
 add_custom_command(TARGET SnowFall POST_BUILD
                    COMMAND codesign --force --deep --sign - "$<TARGET_BUNDLE_DIR:SnowFall>"
@@ -100,6 +111,12 @@ add_custom_command(TARGET SnowFall POST_BUILD
 # Self-test of the real app binary (Metal, windows, tracker, threads).
 add_test(NAME mac_selftest COMMAND "$<TARGET_FILE:SnowFall>" --selftest)
 set_tests_properties(mac_selftest PROPERTIES TIMEOUT 180)
+
+if(SNOW_MAC_UI)
+  target_compile_definitions(SnowFall PRIVATE SNOW_HAS_SWIFT_UI=1)
+  snowfall_ui_attach(SnowFall)   # must stay the last change to SnowFall's compile options
+  message(STATUS "SnowFall: SwiftUI module linked")
+endif()
 
 # ---- disk image -------------------------------------------------------------------------------
 set(SNOW_DMG "${CMAKE_BINARY_DIR}/SnowFall-${PROJECT_VERSION}.dmg")

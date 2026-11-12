@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "app/app_host.h"
 #include "app/strings_mac.h"
 #include "core/skins.h"
 #include "diagnostics/log.h"
@@ -20,6 +21,7 @@
 #include "render/metal_renderer.h"
 #include "runtime/sim_runner.h"
 #include "settings/hotkey.h"
+#include "settings/json.h"
 #include "settings/settings_store.h"
 #include "system/platform_services.h"
 #include "system/text_util.h"
@@ -417,6 +419,48 @@ int runSelfTest() {
             overlay.setVisible(false);
             pumpRunLoop(0.2);
             overlay.shutdown();
+        }
+    }
+
+    // ---- the whole app: status item, UI module, every subsystem wired together ----------------
+    if (screens.empty()) {
+        skip("app", "no screens");
+    } else {
+        auto host = std::make_unique<AppHost>();
+        LaunchOptions o;
+        o.customDataDir = true;
+        o.quiet = true;
+        o.logPath = std::string(dir) + "/snowfall.log";
+        const bool started = host->initialize(o);
+        check(started, "app: AppHost starts (status item, overlays, tracker, simulation, hotkeys)");
+        if (started) {
+            pumpRunLoop(1.5);
+            json::Value diag;
+            const std::string dj = host->diagnosticsJson();
+            const bool parsed = json::parse(dj, diag) && diag.find("fps") && diag.find("monitors") && diag.find("version");
+            check(parsed, "app: diagnosticsJSON", dj.substr(0, 240));
+            // Settings JSON from the UI is applied and comes back sanitized.
+            Settings s = host->settings();
+            s.weather.intensity = 31;
+            s.hotkeys.pauseToggle = "Ctrl+Option+P";   // Mac spelling is accepted and stored portably
+            host->applySettingsJson(toJson(s));
+            check(host->settings().weather.intensity == 31 && host->settings().hotkeys.pauseToggle == "Ctrl+Alt+P",
+                  "app: applySettingsJSON", host->settings().hotkeys.pauseToggle);
+            check(host->validateHotkey("Ctrl+Option+Shift+F17").empty(), "app: validateHotkey accepts a free combination");
+            check(!host->validateHotkey("Ctrl+Pause").empty(), "app: validateHotkey rejects keys a Mac does not have");
+#if defined(SNOW_HAS_SWIFT_UI)
+            check(NSClassFromString(@"SFUIFactory") != nil && host->hasSettingsWindow() && host->hasQuickPanel(),
+                  "ui: SwiftUI module linked (SFUIFactory)");
+            host->openSettings();
+            pumpRunLoop(1.5);
+            check(host->settingsWindowOpen(), "ui: settings window opens");
+            host->closeUi();
+            pumpRunLoop(0.3);
+#else
+            skip("ui", "built without the SwiftUI module (Unix Makefiles generator)");
+#endif
+            host->shutdown();
+            pass("app: clean shutdown");
         }
     }
 

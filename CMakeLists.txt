@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.24)
 
-# macOS: universal binary for macOS 13+. Must be set before project(); pass
-# -DCMAKE_OSX_ARCHITECTURES=arm64 for faster local builds.
+# macOS 13+. Must be set before project(). The Xcode generator builds the universal binary
+# (arm64 + x86_64, what CI ships); Ninja builds the host architecture only, because CMake
+# cannot build multi-architecture Swift (platform/macos/ui) with Ninja.
 if(CMAKE_HOST_APPLE OR EXISTS "/System/Library/CoreServices/SystemVersion.plist")
   if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
   endif()
-  if(NOT DEFINED CMAKE_OSX_ARCHITECTURES)
+  if(NOT DEFINED CMAKE_OSX_ARCHITECTURES AND CMAKE_GENERATOR STREQUAL "Xcode")
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS target architectures")
   endif()
 endif()

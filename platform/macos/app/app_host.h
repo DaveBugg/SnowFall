@@ -29,6 +29,7 @@ struct LaunchOptions {
     bool customDataDir = false;
     bool firstRun = false;          // no settings file existed
     std::string logPath;
+    bool quiet = false;             // self-test: no alerts (they would block), log only
 };
 
 SimPlatformHooks makeMacSimHooks();
@@ -58,6 +59,10 @@ public:
     std::string validateHotkey(const std::string& text) const;   // "" = OK
     const Settings& settings() const { return settings_; }
     std::string logPath() const { return logPath_; }
+    bool hasSettingsWindow() const { return settingsWindow_ != nil; }
+    bool settingsWindowOpen() const { return settingsWindow_ && settingsWindow_.isOpen; }
+    bool hasQuickPanel() const { return quickPanel_ != nil; }
+    void closeUi();
 
 private:
     void onLayout(std::shared_ptr<const DesktopLayout> layout);
@@ -100,6 +105,7 @@ private:
     GovernorDecision decision_;
     bool decisionValid_ = false;
     bool renderOk_ = false;
+    bool quiet_ = false;
 
     SFStatusController* status_ = nil;
     id<SFAppActions> actions_ = nil;

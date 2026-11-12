@@ -57,6 +57,7 @@ AppHost::~AppHost() { shutdown(); }
 bool AppHost::initialize(const LaunchOptions& options) {
     dataDir_ = toUtf8(SettingsStore::dataDirectory());
     logPath_ = options.logPath;
+    quiet_ = options.quiet;
     store_ = SettingsStore(SettingsStore::defaultPath());
     if (!store_.load(settings_)) SNOW_LOGW("settings file was corrupt; defaults loaded");
     sanitize(settings_);
@@ -123,7 +124,7 @@ bool AppHost::initialize(const LaunchOptions& options) {
 
     if (!renderOk_) showRenderFailure(renderError);
     if (options.openSettings) openSettings();
-    else if (options.firstRun && !options.customDataDir) showFirstRunWelcome();
+    else if (options.firstRun && !options.customDataDir && !quiet_) showFirstRunWelcome();
     SNOW_LOGI("started, version %s", SNOW_VERSION);
     return true;
 }
@@ -163,6 +164,11 @@ void AppHost::shutdown() {
 }
 
 void AppHost::quit() { [NSApp terminate:nil]; }
+
+void AppHost::closeUi() {
+    [settingsWindow_ close];
+    [quickPanel_ close];
+}
 
 // ---- layout / governor ---------------------------------------------------------------
 
@@ -284,6 +290,7 @@ void AppHost::saveNow() {
     if (!store_.save(settings_) && !saveFailedReported_) {
         saveFailedReported_ = true;
         SNOW_LOGE("settings could not be saved");
+        if (quiet_) return;
         NSAlert* a = [NSAlert new];
         a.messageText = @"SnowFall";
         a.informativeText = uiRussian() ? @"Не удалось сохранить настройки." : @"Could not save settings.";
@@ -535,6 +542,7 @@ std::string AppHost::diagnosticsJson() const {
 // ---- dialogs -----------------------------------------------------------------------------------
 
 void AppHost::showAccessibilityExplanation() {
+    if (quiet_) return;
     NSAlert* a = [NSAlert new];
     a.messageText = tr(Str::AccessibilityNeededTitle);
     a.informativeText = tr(Str::AccessibilityNeededText);
@@ -562,6 +570,7 @@ void AppHost::showFirstRunWelcome() {
 
 void AppHost::showRenderFailure(const std::string& why) {
     SNOW_LOGE("rendering disabled: %s", why.c_str());
+    if (quiet_) return;
     NSAlert* a = [NSAlert new];
     a.messageText = tr(Str::BalloonDeviceLostTitle);
     a.informativeText = tr(Str::BalloonDeviceLostText);
