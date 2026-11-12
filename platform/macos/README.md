@@ -1,24 +1,62 @@
 # SnowFall for macOS — port plan
 
-Not implemented yet. The portable `core/` (simulation, drifts, tools, snowmen, settings model)
-is written without OS headers and is meant to build on macOS as is
-(`cmake -S . -B build && cmake --build build` builds the core and its unit tests); the CI
-workflow builds and tests it on macOS and Linux. The macOS layer has to provide what
-`platform/windows` provides:
+Status: not started. The portable `core/` (simulation, drifts, tools, snowmen, snowplow,
+settings model/JSON) already builds and passes its unit tests on macOS in CI.
 
-| Piece | Windows | macOS plan |
+## Decisions
+
+| Topic | Decision |
+|---|---|
+| Target | macOS 13 Ventura and newer, universal binary (Apple Silicon first-class, Intel built too). Test machine: M2. |
+| Languages | Objective-C++ for the platform layer (talks to the C++ core directly); **SwiftUI** for the settings window and the menu-bar quick panel, bridged through a small Objective-C++ façade. |
+| Rendering | Metal (`CAMetalLayer`), shaders ported from the HLSL sprite/drift SDF shaders. |
+| Build | CMake (Xcode or Ninja generator), `.app` bundle with `LSUIElement` (no Dock icon). |
+| Signing | No Apple Developer account for now: ad-hoc signed, not notarized. First launch: right-click → Open (documented in the README / release notes). |
+| Distribution | `.dmg` built in CI and attached to GitHub releases. |
+
+## Architecture mapping
+
+| Piece | Windows | macOS |
 |---|---|---|
-| Overlay | per-monitor `WS_EX_LAYERED|TRANSPARENT` window + D3D11 + DirectComposition | borderless `NSWindow` per screen, level above normal windows, `ignoresMouseEvents = true`, transparent `CAMetalLayer` |
-| Renderer | HLSL SDF sprite + drift shaders | port the shaders to Metal Shading Language (same sprite/drift model, `FrameSnapshot` unchanged) |
-| Window tracking → `DesktopLayout` | `EnumWindows` + WinEvent hooks | `CGWindowListCopyWindowInfo` (bounds and Z-order need no permission), polled ~30 Hz; optional Accessibility observers for instant updates |
-| Taskbar surface | `Shell_TrayWnd` | Dock and menu-bar frames (`NSScreen.visibleFrame` vs `frame`) |
-| Interaction input | `WH_MOUSE_LL` only while the mode is active | `CGEventTap` while the mode is active (needs the Accessibility permission; explain it on first use) |
-| Hide system cursor | temporary blank system cursors | `CGDisplayHideCursor` while the tool cursor is shown |
-| Tray + quick panel | notification-area icon, themed popup | `NSStatusItem` with a popover |
-| Settings window | Win32 + custom draw + Direct2D | SwiftUI (same settings model and JSON) |
-| Storage | `%LOCALAPPDATA%\SnowFall` | `~/Library/Application Support/SnowFall` |
+| Overlay | per-monitor layered click-through window + D3D11 + DirectComposition | one borderless `NSWindow` per `NSScreen`: level above normal windows (below the menu bar/Dock menus), `ignoresMouseEvents = YES`, `collectionBehavior = canJoinAllSpaces | stationary | fullScreenAuxiliary | ignoresCycle`, transparent `CAMetalLayer` |
+| Frame pacing | vsync Present | `CVDisplayLink` (macOS 13) / `CADisplayLink` (14+) per screen |
+| Window tracking → `DesktopLayout` | `EnumWindows` + WinEvent hooks | `CGWindowListCopyWindowInfo(onScreenOnly)` on a background queue at ~30 Hz (bounds, layer, owner PID, Z-order; window titles are never requested, so no Screen Recording permission). Diff against the last layout, publish only on change; faster polling while a window is being dragged (mouse button down). |
+| Coordinates | physical pixels, `dpiScale` per monitor | CG global coordinates (top-left origin, points) are used as-is; `dpiScale = 1` for simulation sizes; the renderer draws at `backingScaleFactor` for crisp output |
+| "Taskbar" surface | `Shell_TrayWnd` | the Dock (bottom/left/right, auto-hide aware: derived from `NSScreen.frame` vs `visibleFrame` and the Dock's window from the window list); screen bottom when the Dock is hidden or on another side |
+| Fullscreen auto-pause | foreground window covers the monitor | frontmost app's window covers its screen / the screen is in a fullscreen Space |
+| Interaction input | `WH_MOUSE_LL` only while the mode is on | `CGEventTap` only while the mode is on (needs the Accessibility permission — requested with an explanation the first time the user enters interaction mode) |
+| Hold chord | `GetAsyncKeyState` polling | `NSEvent.modifierFlags` polling (no permission needed) |
+| Hide system cursor | temporary blank system cursors | not possible for a background app with public APIs → the tool sprite is drawn next to the cursor |
+| Hotkeys | `RegisterHotKey` | Carbon `RegisterEventHotKey` (no permission) |
+| Tray + quick panel | notification-area icon + themed popup | `NSStatusItem` + popover hosting the SwiftUI quick panel |
+| Settings window | Win32 + custom draw + Direct2D | SwiftUI, same three themes, live preview (the core `World` rendered into a small Metal view), countdown, presets |
+| Settings / log files | `%LOCALAPPDATA%\SnowFall` | `~/Library/Application Support/SnowFall`, log in `~/Library/Logs/SnowFall` |
 | Autostart | HKCU Run | `SMAppService.mainApp` (login item) |
-| Distribution | installer / MSIX | signed + notarized `.dmg` (Apple Developer account) |
+| Sleep / lock / battery | WM_POWERBROADCAST, WTS | `NSWorkspace` sleep/wake + screen lock notifications, `IOPowerSources` |
+| Crash safety | minidump | `NSSetUncaughtExceptionHandler` + signal handler writing a short report next to the log |
 
-Prerequisites already done in the repository: OS-free core, logger and file I/O behind
-interfaces, settings JSON shared by both platforms.
+## Phases
+
+1. **Core preparation** (on Windows, no Mac needed): move OS-independent pieces out of
+   `platform/windows/app` into `core/`: the simulation thread (`SimRunner`, std::thread +
+   condition variable instead of Win32 events), `PerformanceGovernor`, the RU/EN string table
+   (shared by both UIs), skin names. Windows keeps working unchanged; all tests stay green.
+2. **Snow on screen (MVP)**: overlay windows per screen, Metal renderer (drifts + sprites),
+   window tracker, Dock surface, menu-bar item with Pause / Weather / Clear / Quit, settings
+   load/save, log, auto-pause. CI builds `SnowFall.app` and a `.dmg` artifact.
+   → first test on the M2: snow falls, settles on windows and the Dock, follows dragged windows,
+   no clicks are blocked, CPU/GPU usage.
+3. **Interaction**: event tap + Accessibility onboarding, tools (snowball, mitten, shovel),
+   snowmen, snowplow on the Dock, icicles, hotkeys, umbrella cursor, festive effects.
+4. **Settings and polish**: SwiftUI settings window (three themes, preview, presets,
+   exclusions), quick panel, login item, release `.dmg` in GitHub Releases, README section.
+
+Each phase ends with a build in CI and a checklist for a manual test on the M2 (screenshots +
+the log file are enough for remote diagnosis).
+
+## Known limitations on macOS
+
+- The system cursor stays visible in interaction mode (the tool is drawn next to it).
+- Window tracking is polled, so a drift may trail a fast-dragged window by a frame or two.
+- Without notarization, Gatekeeper asks for confirmation on the first launch.
+- Snow is not drawn over the menu bar, Notification Center, Mission Control or the lock screen.
