@@ -68,8 +68,7 @@ jobs:
           int main() {
               Class f = NSClassFromString(@"SFUIFactory");
               BOOL ok = f && [f conformsToProtocol:@protocol(SFUIFactoryProtocol)];
-              printf("SFUIFactory found: %s
-", ok ? "yes" : "no");
+              puts(ok ? "SFUIFactory found" : "SFUIFactory missing");
               return ok ? 0 : 1;
           }
           EOF
