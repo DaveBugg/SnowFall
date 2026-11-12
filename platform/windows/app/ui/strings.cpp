@@ -12,7 +12,7 @@ struct Entry {
 
 const Entry kTable[] = {
 #define X(id, ru, en) {ru, en},
-#include "strings_table.inc"
+#include "i18n/strings_table.inc"
 #undef X
 };
 

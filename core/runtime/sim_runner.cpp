@@ -1,6 +1,8 @@
-#include "app/sim_runner.h"
+#include "runtime/sim_runner.h"
 
 #include <chrono>
+#include <condition_variable>
+#include <ctime>
 
 #include "diagnostics/log.h"
 #include "simulation/world.h"
@@ -12,12 +14,39 @@ constexpr double kStep = 1.0 / 60.0;
 constexpr int kMaxCatchUpSteps = 3;          // never simulate more than 3 steps per wake-up
 constexpr double kSettleSeconds = 14.0;      // after a user pause, let airborne flakes land
 
-#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
-#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
-#endif
 }  // namespace
 
-SimRunner::SimRunner(SnapshotExchange& exchange) : exchange_(exchange) {}
+namespace {
+class CvWaiter final : public SimWaiter {
+public:
+    void wake() override {
+        {
+            std::lock_guard<std::mutex> lk(m_);
+            signaled_ = true;
+        }
+        cv_.notify_one();
+    }
+    void wait(double timeoutSeconds) override {
+        std::unique_lock<std::mutex> lk(m_);
+        if (timeoutSeconds < 0) {
+            cv_.wait(lk, [this] { return signaled_; });
+        } else {
+            cv_.wait_for(lk, std::chrono::duration<double>(timeoutSeconds), [this] { return signaled_; });
+        }
+        signaled_ = false;
+    }
+
+private:
+    std::mutex m_;
+    std::condition_variable cv_;
+    bool signaled_ = false;
+};
+}  // namespace
+
+std::unique_ptr<SimWaiter> makeDefaultSimWaiter() { return std::make_unique<CvWaiter>(); }
+
+SimRunner::SimRunner(SnapshotExchange& exchange, SimPlatformHooks hooks)
+    : exchange_(exchange), hooks_(std::move(hooks)) {}
 
 SimRunner::~SimRunner() { stop(); }
 
@@ -27,20 +56,16 @@ void SimRunner::start(const Settings& settings, const RuntimeTuning& tuning) {
     tuning_ = tuning;
     settingsDirty_ = true;
     quit_ = false;
-    wake_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    timer_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-    if (!timer_) timer_ = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+    waiter_ = hooks_.makeWaiter ? hooks_.makeWaiter() : makeDefaultSimWaiter();
     thread_ = std::thread([this] { threadMain(); });
 }
 
 void SimRunner::stop() {
     if (!thread_.joinable()) return;
     quit_ = true;
-    SetEvent(wake_);
+    waiter_->wake();
     thread_.join();
-    CloseHandle(wake_);
-    CloseHandle(timer_);
-    wake_ = timer_ = nullptr;
+    waiter_.reset();
 }
 
 void SimRunner::setSettings(const Settings& settings, const RuntimeTuning& tuning) {
@@ -50,7 +75,7 @@ void SimRunner::setSettings(const Settings& settings, const RuntimeTuning& tunin
         tuning_ = tuning;
         settingsDirty_ = true;
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::setLayout(std::shared_ptr<const DesktopLayout> layout) {
@@ -58,7 +83,7 @@ void SimRunner::setLayout(std::shared_ptr<const DesktopLayout> layout) {
         std::lock_guard<std::mutex> lk(m_);
         layout_ = std::move(layout);
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::setMode(SimMode mode) {
@@ -66,7 +91,7 @@ void SimRunner::setMode(SimMode mode) {
         std::lock_guard<std::mutex> lk(m_);
         mode_ = mode;
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::setInteractionMode(bool active) {
@@ -74,7 +99,7 @@ void SimRunner::setInteractionMode(bool active) {
         std::lock_guard<std::mutex> lk(m_);
         interaction_ = active;
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::setPointer(float x, float y) {
@@ -89,7 +114,7 @@ void SimRunner::postInput(const InputEvent& ev) {
         std::lock_guard<std::mutex> lk(m_);
         inputs_.push_back(ev);
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::clearSnow() {
@@ -97,7 +122,7 @@ void SimRunner::clearSnow() {
         std::lock_guard<std::mutex> lk(m_);
         clear_ = true;
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::triggerSnowplow() {
@@ -105,7 +130,7 @@ void SimRunner::triggerSnowplow() {
         std::lock_guard<std::mutex> lk(m_);
         plow_ = true;
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::triggerFireworks() {
@@ -113,11 +138,11 @@ void SimRunner::triggerFireworks() {
         std::lock_guard<std::mutex> lk(m_);
         fireworks_ = true;
     }
-    if (wake_) SetEvent(wake_);
+    if (waiter_) waiter_->wake();
 }
 
 void SimRunner::threadMain() {
-    SetThreadDescription(GetCurrentThread(), L"SnowSimulation");
+    if (hooks_.onThreadStart) hooks_.onThreadStart();
     World world;
 
     // Small pool of snapshot buffers: a buffer is reused once nobody else holds it, so the
@@ -257,7 +282,7 @@ void SimRunner::threadMain() {
             } else if (changed) {
                 publish(false);
             }
-            WaitForSingleObject(wake_, INFINITE);
+            waiter_->wait(-1.0);
             last = Clock::now();
             accumulator = 0;
             continue;
@@ -265,15 +290,29 @@ void SimRunner::threadMain() {
 
         // ---- ambient inputs: pointer ("umbrella") and local calendar time -----
         {
-            POINT pt;
-            const bool ok = GetCursorPos(&pt) != FALSE;   // fails on the secure desktop
-            world.setAmbientPointer(static_cast<float>(pt.x), static_cast<float>(pt.y), ok);
+            float px = 0, py = 0;
+            const bool ok = hooks_.cursor && hooks_.cursor(px, py);
+            world.setAmbientPointer(px, py, ok);
             const auto tnow = Clock::now();
             if (tnow - lastClock >= std::chrono::seconds(1)) {
                 lastClock = tnow;
-                SYSTEMTIME st;
-                GetLocalTime(&st);
-                world.setLocalTime(st.wYear, st.wMonth, st.wDay, st.wHour * 3600 + st.wMinute * 60 + st.wSecond);
+                int y = 0, mo = 0, d = 0, sec = 0;
+                if (hooks_.localTime) {
+                    hooks_.localTime(y, mo, d, sec);
+                } else {
+                    const std::time_t tt = std::time(nullptr);
+                    std::tm lt{};
+#ifdef _WIN32
+                    localtime_s(&lt, &tt);
+#else
+                    localtime_r(&tt, &lt);
+#endif
+                    y = lt.tm_year + 1900;
+                    mo = lt.tm_mon + 1;
+                    d = lt.tm_mday;
+                    sec = lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec;
+                }
+                world.setLocalTime(y, mo, d, sec);
             }
         }
 
@@ -299,12 +338,7 @@ void SimRunner::threadMain() {
 
         // ---- wait for the next tick or a command ------------------------------
         const double remaining = kStep - accumulator;
-        LARGE_INTEGER due;
-        due.QuadPart = -static_cast<LONGLONG>(remaining * 1e7);
-        if (due.QuadPart > -1000) due.QuadPart = -1000;
-        SetWaitableTimerEx(timer_, &due, 0, nullptr, nullptr, nullptr, 0);
-        HANDLE handles[2] = {timer_, wake_};
-        WaitForMultipleObjects(2, handles, FALSE, 100);
+        waiter_->wait(remaining < 0.0001 ? 0.0001 : remaining);
     }
     SNOW_LOGI("simulation thread stopped after %llu frames", static_cast<unsigned long long>(frame));
 }

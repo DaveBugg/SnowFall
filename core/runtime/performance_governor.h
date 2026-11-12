@@ -1,7 +1,7 @@
 // PerformanceGovernor: pure decision logic turning user settings + system state into
 // what the app should do right now (simulate? show overlays? quality?). No Win32 here.
 #pragma once
-#include "app/sim_runner.h"
+#include "runtime/sim_runner.h"
 #include "core/settings.h"
 
 namespace snow {

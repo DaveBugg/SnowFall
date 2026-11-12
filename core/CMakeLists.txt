@@ -6,7 +6,7 @@
 #   snow_diag      logger backend: portable stderr version here on non-Windows;
 #                  Windows provides its own (platform/windows/diagnostics)
 
-snow_module(snow_sim      "${CMAKE_CURRENT_SOURCE_DIR}" core simulation surfaces interaction)
+snow_module(snow_sim      "${CMAKE_CURRENT_SOURCE_DIR}" core simulation surfaces interaction runtime i18n)
 snow_module(snow_settings "${CMAKE_CURRENT_SOURCE_DIR}" settings)
 
 if(NOT WIN32)

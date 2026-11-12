@@ -7,7 +7,7 @@ namespace snow {
 
 enum class StrId : int {
 #define X(id, ru, en) id,
-#include "strings_table.inc"
+#include "i18n/strings_table.inc"
 #undef X
     Count
 };

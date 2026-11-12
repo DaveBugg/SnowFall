@@ -9,6 +9,8 @@ core/                     portable C++20 — no OS headers (enforced by review)
   surfaces/               surface registry, heightmaps, rectangle geometry (occlusion)
   interaction/            tools, snowballs & snowmen, snowplow, icicles, splats
   settings/               JSON parser/writer, settings mapping + migrations + sanitize(), hotkeys
+  runtime/                simulation thread (SimRunner, OS services via SimPlatformHooks), governor
+  i18n/                   RU/EN UI string table shared by all platforms
   diagnostics/            logger interface (log.h) + portable stderr backend
   tests/                  tiny test harness (snow_test.h) and core unit tests
 platform/windows/         Windows 11 implementation

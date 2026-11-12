@@ -1,7 +1,7 @@
 #include "app/interaction_controller.h"
 
 #include "app/cursor_hider.h"
-#include "app/sim_runner.h"
+#include "runtime/sim_runner.h"
 #include "diagnostics/log.h"
 
 namespace snow {

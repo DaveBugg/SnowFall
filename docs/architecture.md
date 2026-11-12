@@ -16,7 +16,7 @@
 
 * **UI-поток** — все HWND приложения, `SetWinEventHook`, `RegisterHotKey`, низкоуровневый
   мышиный хук (только в режиме взаимодействия), сообщения питания/сеанса. Тяжёлой работы нет.
-* **Поток симуляции** (`app/sim_runner.cpp`) — фиксированный шаг 1/60 с, не более 3 шагов
+* **Поток симуляции** (`core/runtime/sim_runner.cpp`, ожидание и курсор — через хуки платформы) — фиксированный шаг 1/60 с, не более 3 шагов
   catch-up, после >250 мс простоя (сон, отладчик) пропущенное время не симулируется.
   Раскладка окон и настройки передаются через latest-value mailbox: при перетаскивании окна
   применяется только последняя раскладка. Снимки — пул `shared_ptr<FrameSnapshot>`,
@@ -37,6 +37,8 @@ core/                 переносимый C++20, без заголовков 
   surfaces/           поверхности, карта высот, вычитание прямоугольников (окклюзия)
   interaction/        инструменты, снежки и снеговики, машинка, сосульки, кляксы
   settings/           JSON, миграции, sanitize(), грамматика горячих клавиш
+  runtime/            поток симуляции (SimRunner), PerformanceGovernor
+  i18n/               таблица строк интерфейса RU/EN
   diagnostics/log.h   интерфейс журнала (реализация — в платформе)
   tests/              юнит-тесты ядра
 platform/windows/     Win32 + D3D11/DirectComposition
@@ -60,7 +62,7 @@ platform/macos/       план порта (пока не реализован)
 | SnowSimulation | `core/simulation/` (фасад `World`) |
 | InteractionController | `platform/windows/app/interaction_controller.*` (ввод) + `core/interaction/` |
 | Renderer | `platform/windows/rendering/d3d11/` |
-| PerformanceGovernor | `platform/windows/app/performance_governor.h` |
+| PerformanceGovernor | `core/runtime/performance_governor.h` |
 | SettingsStore | `core/settings/` (модель, JSON) + `platform/windows/settings/` (файлы) |
 | Diagnostics | `core/diagnostics/log.h` + реализация в платформе |
 

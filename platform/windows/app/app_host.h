@@ -8,8 +8,9 @@
 #include <vector>
 
 #include "app/interaction_controller.h"
-#include "app/performance_governor.h"
-#include "app/sim_runner.h"
+#include "runtime/performance_governor.h"
+#include "runtime/sim_runner.h"
+#include "app/sim_platform_win.h"
 #include "app/ui/settings_window.h"
 #include "app/ui/tray_icon.h"
 #include "core/layout.h"
@@ -90,7 +91,7 @@ private:
     bool saveFailedReported_ = false;
 
     SnapshotExchange snapshots_;
-    SimRunner runner_{snapshots_};
+    SimRunner runner_{snapshots_, makeWindowsSimHooks()};
     OverlaySystem overlay_;
     WindowTracker tracker_;
     InteractionController interaction_{runner_, snapshots_};
