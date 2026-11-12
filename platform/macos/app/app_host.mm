@@ -535,20 +535,11 @@ std::string AppHost::diagnosticsJson() const {
 // ---- dialogs -----------------------------------------------------------------------------------
 
 void AppHost::showAccessibilityExplanation() {
-    const bool ru = uiRussian();
     NSAlert* a = [NSAlert new];
-    a.messageText = ru ? @"Разрешите SnowFall «Универсальный доступ»" : @"Allow SnowFall to use Accessibility";
-    a.informativeText =
-        ru ? @"Чтобы лепить снежки и сметать снег мышью, SnowFall должен перехватывать щелчки по снегу (и только по "
-             @"снегу, пока включён режим взаимодействия). macOS разрешает это только программам из списка "
-             @"«Универсальный доступ».\n\nSnowFall не читает клавиатуру, содержимое и заголовки окон. Без разрешения "
-             @"инструмент просто следует за курсором."
-           : @"To roll snowballs and brush snow with the mouse, SnowFall has to capture clicks on the snow (only on "
-             @"the snow, and only while interaction mode is on). macOS allows that only for apps listed under "
-             @"Accessibility.\n\nSnowFall never reads the keyboard, window contents or titles. Without the permission "
-             @"the tool just follows the pointer.";
-    [a addButtonWithTitle:ru ? @"Открыть Системные настройки" : @"Open System Settings"];
-    [a addButtonWithTitle:ru ? @"Не сейчас" : @"Not Now"];
+    a.messageText = tr(Str::AccessibilityNeededTitle);
+    a.informativeText = tr(Str::AccessibilityNeededText);
+    [a addButtonWithTitle:tr(Str::BtnOpenSystemSettings)];
+    [a addButtonWithTitle:tr(Str::BtnCancel)];
     sfActivateApp();
     if ([a runModal] == NSAlertFirstButtonReturn) {
         requestAccessibility();

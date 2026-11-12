@@ -1,5 +1,6 @@
-// UI strings for the macOS shell: the shared RU/EN table of core/i18n/strings_table.inc with
-// a few Mac-specific wordings (Dock instead of taskbar, "Open at login", Ctrl+Option, ...).
+// UI strings for the macOS shell: the shared RU/EN table of core/i18n/strings_table.inc, with
+// every "<Id>Mac" variant substituted under its base id (Dock instead of taskbar, "Open at
+// login", Ctrl+Option, ...) plus a few local overrides.
 // Objective-C++ (returns NSString). Main thread.
 #pragma once
 #import <Foundation/Foundation.h>

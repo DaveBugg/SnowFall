@@ -263,7 +263,11 @@ TEST(msl_translation) {
         CHECK(s.find("nointerpolation") == std::string::npos);
         CHECK(!std::regex_search(s, std::regex(R"((^|[^_\w])(lerp|frac|ddx|ddy)\s*\()")));
         CHECK(!std::regex_search(s, std::regex(R"(\bmain\s*\()")));
-        CHECK(!std::regex_search(s, std::regex(R"((^|[^.\w])gOpacity\b)")));   // always F_.gOpacity
+        // gOpacity only as the SFFrame member and as F_.gOpacity in translated code.
+        std::ptrdiff_t bare = 0;
+        const std::regex re(R"((^|[^.\w])gOpacity\b)");
+        for (auto it = std::sregex_iterator(s.begin(), s.end(), re); it != std::sregex_iterator(); ++it) ++bare;
+        CHECK(bare == 1);
     }
     CHECK(translateHlsl("float patch = 1.0; float x = lerp(a, b, t);", "m") == "float patch_ = 1.0; float x = sf_lerp(a, b, t);");
     CHECK(translateHlsl("struct V { float4 p : SV_Position; float c = x ? a : B; };", "m").find(": B") == std::string::npos);
@@ -288,8 +292,12 @@ TEST(settings_store_round_trip) {
     s.userPresets.push_back(UserPreset{"Вечер", s.weather, 40, 80});
     CHECK(store.save(s));
     CHECK(access((toUtf8(store.path()) + ".tmp").c_str(), F_OK) != 0);   // temp file renamed away
+    Settings expected;   // the sanitized form every save/load cycle yields
+    CHECK(fromJson(toJson(s), expected));
     Settings back;
-    CHECK(store.load(back) && back == s);
+    CHECK(store.load(back));
+    CHECK(back == expected);
+    CHECK(toJson(back) == toJson(s));
 }
 
 // ---- text + icon ------------------------------------------------------------------------------------

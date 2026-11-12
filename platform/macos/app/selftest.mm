@@ -290,9 +290,22 @@ int runSelfTest() {
         s.weather.intensity = 77;
         s.hotkeys.pauseToggle = "Ctrl+Alt+P";
         s.system.excludedProcesses = {"Safari", "Google Chrome"};
+        Settings expected;   // what any save/load cycle yields: the sanitized form
+        fromJson(toJson(s), expected);
         Settings back;
-        check(store.save(s) && store.load(back) && back == s, "settings: save/load round trip");
+        const bool saved = store.save(s);
+        const bool loaded = store.load(back);
         const std::string path = toUtf8(store.path());
+        std::string head;
+        if (FILE* f = std::fopen(path.c_str(), "rb")) {
+            char buf[48] = {};
+            const size_t n = std::fread(buf, 1, sizeof buf - 1, f);
+            std::fclose(f);
+            for (size_t i = 0; i < n; ++i) head += fmt("%02x", static_cast<unsigned char>(buf[i]));
+        }
+        check(saved && loaded && back == expected, "settings: save/load round trip",
+              saved && loaded && back == expected ? "" : fmt("saved=%d loaded=%d equal=%d file=%s", saved, loaded,
+                                                             back == expected, head.c_str()));
         if (FILE* f = std::fopen(path.c_str(), "wb")) {
             std::fputs("{ not json", f);
             std::fclose(f);

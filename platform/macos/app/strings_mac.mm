@@ -2,6 +2,8 @@
 
 #include <cstring>
 #include <cwchar>
+#include <string>
+#include <vector>
 
 namespace snow::mac {
 namespace {
@@ -18,53 +20,38 @@ const Entry kTable[] = {
 };
 static_assert(sizeof kTable / sizeof kTable[0] == static_cast<std::size_t>(Str::Count), "string table mismatch");
 
-// Mac wording where the shared table talks about Windows concepts.
+// Mac wording: the shared table carries "<Id>Mac" variants for texts that mention Windows
+// concepts (Dock instead of taskbar, Ctrl+Option, Open at login, ...); they replace the base
+// entry automatically. The few left-overs without a Mac variant are overridden here.
 struct Override {
     const char* key;
     NSString* ru;
     NSString* en;
 };
 const Override kOverrides[] = {
-    {"MenuAutostart", @"Запускать при входе", @"Open at Login"},
-    {"ChkStartup", @"Запускать при входе в систему", @"Open at login"},
     {"MenuExit", @"Завершить SnowFall", @"Quit SnowFall"},
-    {"ChkOnTaskbar", @"На Dock", @"On the Dock"},
-    {"ChkSnowplow", @"Снегоуборочная машинка на Dock", @"Snowplow on the Dock"},
-    {"ChkSnowplowAllTaskbars", @"На каждом экране с Dock", @"On every screen with the Dock"},
-    {"SnowplowAllTaskbarsHint", @"macOS показывает Dock на одном экране — машинка ездит там, где он",
-     @"macOS shows the Dock on one screen at a time; the plow drives where it is"},
-    {"ChkGarland", @"Гирлянда над Dock", @"Garland above the Dock"},
-    {"FestiveText",
-     @"Гирлянда мигает вдоль верхнего края Dock. Салют начнётся сам в полночь 31 декабря и продлится около полутора минут, а кнопка «Салют!» запускает его прямо сейчас.",
-     @"The garland twinkles along the top edge of the Dock. Fireworks start by themselves at midnight on December 31 and last about a minute and a half; the «Fireworks!» button launches them right now."},
-    {"ChkHoldKey", @"Удерживать Ctrl+Option для временного режима", @"Hold Ctrl+Option for temporary interaction mode"},
     {"HoldHintNone", @"Режим взаимодействия: горячая клавиша или меню в строке меню",
      @"Interaction mode: use its hotkey or the menu bar menu"},
-    {"HelpText",
-     @"Чтобы трогать снег, удерживайте Ctrl+Option или включите режим горячей клавишей либо в меню в строке меню.\n"
-     @"• Левая кнопка по сугробу: варежка сметает снег, лопата расчищает полосу; правый щелчок — следующий инструмент.\n"
-     @"• Снежок: тяните от сугроба — ком растёт; положите шар на шар, и получится снеговик.\n"
-     @"• Снежки и снеговики живут позади окон: на основном мониторе или на всех (флажок выше).\n"
-     @"• Для щелчков по снегу macOS попросит разрешение «Универсальный доступ».",
-     @"To touch the snow, hold Ctrl+Option or turn the mode on with its hotkey or from the menu bar menu.\n"
-     @"• Left-drag over a drift: the mitten brushes snow away, the shovel clears a strip; right-click picks the next tool.\n"
-     @"• Snowball: drag from a drift and the ball grows; drop a ball onto another to build a snowman.\n"
-     @"• Snowballs and snowmen live behind windows: on the primary display or on all displays (option above).\n"
-     @"• To click on the snow, macOS asks for the Accessibility permission."},
     {"ChkLeftClick", @"Щелчок по значку в строке меню — пауза", @"Menu bar icon click: pause"},
-    {"HotkeyHint", @"Щёлкните поле и нажмите сочетание с Ctrl, Option, Shift или Cmd. Backspace или Delete — отключить.",
-     @"Click a field and press a combination with Ctrl, Option, Shift or Cmd. Backspace or Delete disables it."},
     {"LblExeName", @"Имя приложения:", @"App name:"},
     {"ExeCue", @"например, Safari", @"for example, Safari"},
-    {"PickerHint", @"Программы с открытыми окнами. Выберите одну или несколько (Cmd, Shift) — их окна останутся без снега.",
-     @"Apps with open windows. Select one or more (Cmd, Shift); their windows will stay free of snow."},
-    {"AboutDescription",
-     @"Интерактивный снег на рабочем столе macOS: снежинки падают поверх экрана, оседают на окнах и Dock, "
-     @"а из сугробов можно катать снежки и собирать снеговиков.",
-     @"Interactive snow for the macOS desktop: snowflakes fall over the screen, settle on windows and the Dock, "
-     @"and drifts can be rolled into snowballs and snowmen."},
     {"ChkAllMonitors", @"Снежки и снеговики на всех экранах", @"Snowballs and snowmen on all displays"},
 };
+
+// For every entry: index of its "<Id>Mac" variant, or -1.
+const std::vector<int>& macVariants() {
+    static const std::vector<int> v = [] {
+        const std::size_t n = sizeof kTable / sizeof kTable[0];
+        std::vector<int> out(n, -1);
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::string mac = std::string(kTable[i].key) + "Mac";
+            for (std::size_t j = 0; j < n; ++j)
+                if (mac == kTable[j].key) out[i] = static_cast<int>(j);
+        }
+        return out;
+    }();
+    return v;
+}
 
 bool g_russian = false;
 
@@ -79,7 +66,9 @@ NSString* lookup(std::size_t i) {
     const Entry& e = kTable[i];
     for (const Override& o : kOverrides)
         if (std::strcmp(o.key, e.key) == 0) return g_russian ? o.ru : o.en;
-    return fromWide(g_russian ? e.ru : e.en);
+    const int mac = macVariants()[i];
+    const Entry& use = mac >= 0 ? kTable[mac] : e;
+    return fromWide(g_russian ? use.ru : use.en);
 }
 
 bool systemPrefersRussian() {
@@ -120,6 +109,8 @@ NSDictionary<NSString*, NSString*>* uiStringTable() {
 NSArray<NSString*>* macOverriddenKeys() {
     NSMutableArray<NSString*>* a = [NSMutableArray array];
     for (const Override& o : kOverrides) [a addObject:[NSString stringWithUTF8String:o.key]];
+    for (std::size_t i = 0; i < macVariants().size(); ++i)
+        if (macVariants()[i] >= 0) [a addObject:[NSString stringWithUTF8String:kTable[i].key]];
     return a;
 }
 
