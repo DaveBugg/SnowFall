@@ -1,0 +1,101 @@
+name: macOS UI
+
+# SwiftUI module of the macOS port (platform/macos/ui): standalone build with warnings as errors,
+# the UI self-test with screenshots, and a check that the module builds inside the root project
+# the way the app shell will consume it.
+on:
+  push:
+    branches: ["mac/**"]
+  pull_request:
+    paths: ["platform/macos/**", "core/i18n/**", ".github/workflows/mac-ui.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    name: UI module + self-test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          cmake --version
+          command -v ninja || brew install ninja
+      - name: Configure
+        run: cmake -S platform/macos/ui -B build-ui -G Ninja -DCMAKE_BUILD_TYPE=Release -DSNOWFALL_UI_WERROR=ON
+      - name: Build (no warnings allowed)
+        run: |
+          set -o pipefail
+          cmake --build build-ui 2>&1 | tee build-ui.log
+          if grep -E "warning:" build-ui.log; then echo "::error::warnings in the UI build"; exit 1; fi
+      - name: Self-test (screenshots)
+        run: |
+          mkdir -p selftest-out
+          # perl alarm = portable timeout (no coreutils on the runner image)
+          perl -e 'alarm shift; exec @ARGV' 300 ./build-ui/snowfall_ui_demo --selftest "$PWD/selftest-out"
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: snowfall-ui-selftest
+          path: selftest-out/
+          if-no-files-found: warn
+
+  integration:
+    name: UI inside the root project (app-style add_subdirectory)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Stand-in platform/macos/CMakeLists.txt (only if the app is not there yet)
+        run: |
+          if [ ! -f platform/macos/CMakeLists.txt ]; then
+            cat > platform/macos/CMakeLists.txt <<'EOF'
+          # CI stand-in for the app shell: consumes the UI exactly like the app will.
+          enable_language(OBJC OBJCXX Swift)
+          add_subdirectory(ui)
+          add_executable(sf_app_standin standin_main.mm)
+          target_compile_options(sf_app_standin PRIVATE -fobjc-arc)
+          snowfall_ui_attach(sf_app_standin)
+          EOF
+            cat > platform/macos/standin_main.mm <<'EOF'
+          #import <AppKit/AppKit.h>
+          #import "SFBridge.h"
+          int main() {
+              Class f = NSClassFromString(@"SFUIFactory");
+              BOOL ok = f && [f conformsToProtocol:@protocol(SFUIFactoryProtocol)];
+              puts(ok ? "SFUIFactory found" : "SFUIFactory missing");
+              return ok ? 0 : 1;
+          }
+          EOF
+          fi
+          cat platform/macos/CMakeLists.txt
+      - name: Configure + build (root, Ninja)
+        run: |
+          command -v ninja || brew install ninja
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSNOWFALL_UI_DEMO=ON
+          cmake --build build --parallel
+      - name: App stand-in + demo smoke run
+        run: |
+          "$(find build -name sf_app_standin -type f | head -1)"
+          demo=$(find build -name snowfall_ui_demo -type f | head -1)
+          mkdir -p smoke-out
+          perl -e 'alarm shift; exec @ARGV' 300 "$demo" --selftest "$PWD/smoke-out"
+
+  universal:
+    name: Universal (arm64 + x86_64) build probe
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure + build
+        run: |
+          command -v ninja || brew install ninja
+          # Ninja cannot build multi-arch Swift; the Xcode generator can.
+          cmake -S platform/macos/ui -B build-uni -G Xcode "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          cmake --build build-uni --config Release -- -quiet
+          lipo -info "$(find build-uni -name snowfall_ui_demo -type f | head -1)"
