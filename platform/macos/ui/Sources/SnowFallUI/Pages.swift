@@ -456,14 +456,14 @@ struct SystemPage: View {
                 SnowToggle(title: t["ChkLeftClick"], isOn: store.binding(\.system.trayLeftClickTogglesPause))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            LabeledRow(label: t["LblLanguage"]) {
+            LabeledRow(label: t["LblLanguage"], width: 136) {
                 // Language names are written in their own language, as in every language menu.
                 SnowSegmented(options: [(UILanguage.auto, t["LangAuto"]), (.ru, "Русский"), (.en, "English")],
                               selection: store.binding(\.system.language), label: t["LblLanguage"])
             }
-            LabeledRow(label: t["LblTheme"]) {
+            LabeledRow(label: t["LblTheme"], width: 136) {
                 SnowSegmented(options: [(UITheme.night, t["ThemeNight"]), (.globe, t["ThemeGlobe"]), (.postcard, t["ThemePostcard"])],
-                              selection: store.binding(\.system.uiTheme), label: t["LblTheme"])
+                              selection: store.binding(\.system.uiTheme), equalWidths: false, label: t["LblTheme"])
             }
 
             Group {

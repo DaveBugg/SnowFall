@@ -73,13 +73,13 @@ struct QuickPanelView: View {
             .accessibilityLabel(t["GroupWeather"])
             VStack(spacing: 2) {
                 SliderRow(label: t["QuickIntensity"], value: store.binding(\.weather.intensity), range: 0...100,
-                          valueText: ValueText.percent(s.weather.intensity), labelWidth: 64, valueWidth: 52)
+                          valueText: ValueText.percent(s.weather.intensity), labelWidth: 84, valueWidth: 52)
                 SliderRow(label: t["QuickWind"], value: store.binding(\.weather.wind), range: -100...100,
-                          valueText: ValueText.wind(s.weather.wind, t), labelWidth: 64, valueWidth: 52)
+                          valueText: ValueText.wind(s.weather.wind, t), labelWidth: 84, valueWidth: 52)
             }
             HStack(spacing: 12) {
                 Text(t["GroupTool"]).font(.system(size: UIMetrics.font)).foregroundColor(p.text.c)
-                    .frame(width: 64, alignment: .leading)
+                    .frame(width: 84, alignment: .leading)
                 ToolChip(store: store, palette: p, onWindowSurface: true)
                 Spacer(minLength: 0)
             }

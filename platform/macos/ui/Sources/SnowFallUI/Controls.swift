@@ -174,6 +174,8 @@ struct SnowSegmented<T: Hashable>: View {
     let options: [(value: T, title: String)]
     @Binding var selection: T
     var height: CGFloat = 28
+    /// false: each segment as wide as its text (long theme names), true: equal widths.
+    var equalWidths = true
     var label = ""
 
     var body: some View {
@@ -187,8 +189,8 @@ struct SnowSegmented<T: Hashable>: View {
                         .font(.system(size: UIMetrics.font, weight: selected ? .semibold : .regular))
                         .lineLimit(1).minimumScaleFactor(0.75)
                         .foregroundColor(selected ? p.accentText.c : p.controlText.c)
-                        .padding(.horizontal, 10)
-                        .frame(maxWidth: .infinity, minHeight: height - 4)
+                        .padding(.horizontal, equalWidths ? 10 : 8)
+                        .frame(maxWidth: equalWidths ? .infinity : nil, minHeight: height - 4)
                         .background(RoundedRectangle(cornerRadius: 6).fill(selected ? p.accent.c : Color.clear))
                         .contentShape(Rectangle())
                 }
