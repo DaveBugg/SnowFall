@@ -5,7 +5,58 @@
 #include <system_error>
 #include <utility>
 
+#if defined(__APPLE__)
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <xlocale.h>
+#endif
+
 namespace snow::json {
+
+namespace {
+// Floating-point <charconv> is unavailable in Apple's libc++ for the macOS 13 deployment
+// target (from_chars(double): macOS 26, to_chars(double): 13.3). On Apple platforms the same
+// results come from the C library with the "C" locale; everywhere else <charconv> is used.
+#if defined(__APPLE__)
+locale_t cLocale() {
+    static const locale_t loc = newlocale(LC_ALL_MASK, "C", nullptr);
+    return loc;
+}
+#endif
+
+bool parseDouble(const char* first, const char* last, double& out) {
+#if defined(__APPLE__)
+    const std::string text(first, last);
+    char* end = nullptr;
+    errno = 0;
+    const double d = strtod_l(text.c_str(), &end, cLocale());
+    if (errno == ERANGE || end != text.c_str() + text.size()) return false;
+    out = d;
+    return true;
+#else
+    const auto res = std::from_chars(first, last, out);
+    return res.ec == std::errc() && res.ptr == last;
+#endif
+}
+
+// Shortest representation that parses back to exactly `d`.
+char* formatDouble(char* first, char* last, double d) {
+#if defined(__APPLE__)
+    const auto size = static_cast<size_t>(last - first);
+    for (int precision = 15; precision <= 17; ++precision) {
+        const int n = snprintf_l(first, size, cLocale(), "%.*g", precision, d);
+        if (n <= 0 || static_cast<size_t>(n) >= size) return first;
+        double back = 0.0;
+        if (precision == 17 || (parseDouble(first, first + n, back) && back == d)) return first + n;
+    }
+    return first;
+#else
+    return std::to_chars(first, last, d).ptr;   // shortest round-trip form
+#endif
+}
+}  // namespace
 
 // ---------------------------------------------------------------- Value
 
@@ -393,8 +444,7 @@ private:
             while (isDigit()) ++i_;
         }
         double d = 0.0;
-        const auto res = std::from_chars(s_.data() + start, s_.data() + i_, d);
-        if (res.ec != std::errc() || res.ptr != s_.data() + i_) {
+        if (!parseDouble(s_.data() + start, s_.data() + i_, d)) {
             i_ = start;
             return fail("number out of range");
         }
@@ -455,13 +505,13 @@ void writeNumber(std::string& out, double d) {
         return;
     }
     char buf[40];
-    std::to_chars_result res{};
+    char* end = buf;
     if (d == std::floor(d) && std::fabs(d) < 9007199254740992.0) {
-        res = std::to_chars(buf, buf + sizeof(buf), static_cast<long long>(d));
+        end = std::to_chars(buf, buf + sizeof(buf), static_cast<long long>(d)).ptr;
     } else {
-        res = std::to_chars(buf, buf + sizeof(buf), d);   // shortest round-trip form
+        end = formatDouble(buf, buf + sizeof(buf), d);
     }
-    out.append(buf, res.ptr);
+    out.append(buf, end);
 }
 
 void newline(std::string& out, int indent, int level) {
