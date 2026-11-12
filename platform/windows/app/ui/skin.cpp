@@ -386,10 +386,15 @@ bool Skin::onDrawItem(LPARAM lp) {
             const float r = (chip.bottom - chip.top) / 2;
             pt.fillRound(chip, r, col(sel ? mixColor(p.control, p.accent, 0.25f) : p.control));
             pt.strokeRound(chip, r, col(sel ? p.accent : p.controlBorder), sel ? 1.5f : 1.0f);
-            pt.fillEllipse(chip.left + 13, s.height / 2, 3.5f, 3.5f, col(p.accent));
-            TextStyle ts{pt.bodySize()};
-            const float right = deletable ? chipDeleteZone(s.width) : chip.right - 8;
-            pt.text(text, rf(chip.left + 22, 0, right, s.height), ts, col(p.controlText));
+            if (deletable) {
+                pt.fillEllipse(chip.left + 13, s.height / 2, 3.5f, 3.5f, col(p.accent));
+                TextStyle ts{pt.bodySize()};
+                pt.text(text, rf(chip.left + 22, 0, chipDeleteZone(s.width), s.height), ts, col(p.controlText));
+            } else {   // compact chip (quick panel): centred name, no marker
+                TextStyle ts{pt.bodySize() * 0.94f};
+                ts.align = DWRITE_TEXT_ALIGNMENT_CENTER;
+                pt.text(text, rf(chip.left + 6, 0, chip.right - 6, s.height), ts, col(p.controlText));
+            }
             if (deletable) {
                 const float cx = chip.right - 13, cy = s.height / 2;
                 pt.line(cx - 3.5f, cy - 3.5f, cx + 3.5f, cy + 3.5f, col(p.textSecondary), 1.4f);

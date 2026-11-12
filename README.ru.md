@@ -8,7 +8,7 @@
 **Платформа:** Windows 11 x64 (нативный C++20, Win32 + Direct3D 11). Планируется порт на
 macOS — см. [platform/macos](platform/macos/README.md). [English README](README.md)
 
-![Окно настроек, тема «Зимняя ночь»](docs/images/settings-night.png)
+![Окно настроек, тема «Зимняя ночь»](docs/images/ru/settings-night.png)
 
 ## Возможности
 
@@ -33,7 +33,11 @@ macOS — см. [platform/macos](platform/macos/README.md). [English README](REA
 
 | Быстрая панель | Скины снеговиков |
 |---|---|
-| ![Быстрая панель](docs/images/quick-panel.png) | ![Скины](docs/images/snowman-skins.png) |
+| ![Быстрая панель](docs/images/ru/quick-panel.png) | ![Скины](docs/images/snowman-skins.png) |
+
+| Тема «Снежный шар» | Тема «Новогодняя открытка» |
+|---|---|
+| ![Снежный шар](docs/images/ru/settings-globe.png) | ![Открытка](docs/images/ru/settings-postcard.png) |
 
 ## Установка
 

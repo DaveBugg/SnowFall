@@ -190,7 +190,7 @@ struct QuickPanel::Impl {
         btn(IDC_QP_FIREWORKS, tr(StrId::BtnFireworks), 12, kH - 42, false);
         btn(IDC_QP_SETTINGS, tr(StrId::MenuSettings), 176, kH - 42, false);
         SendMessageW(chips, LB_SETITEMHEIGHT, 0, px(34));
-        SendMessageW(chips, LB_SETCOLUMNWIDTH, px(132), 0);
+        SendMessageW(chips, LB_SETCOLUMNWIDTH, px(106), 0);   // three chips fit without scrolling
     }
 
     void createFonts() {

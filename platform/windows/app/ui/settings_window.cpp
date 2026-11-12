@@ -854,7 +854,7 @@ struct SettingsWindow::Impl {
         place(statusLine, pageX + 2, bottomY, clientW - 14 - 120 - 10 - 290 - 12 - pageX, kBottomH);
         HWND chips = ctl(IDC_UP_LIST);
         SendMessageW(chips, LB_SETITEMHEIGHT, 0, px(34));
-        SendMessageW(chips, LB_SETCOLUMNWIDTH, px(132), 0);
+        SendMessageW(chips, LB_SETCOLUMNWIDTH, px(152), 0);
 
         RECT wr{0, 0, px(clientW), px(bottomY + kBottomH + 10)};
         const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE));

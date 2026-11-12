@@ -36,6 +36,10 @@ see [platform/macos](platform/macos/README.md).
 |---|---|
 | ![Quick panel](docs/images/quick-panel.png) | ![Snowman skins](docs/images/snowman-skins.png) |
 
+| "Snow globe" theme | "New Year card" theme |
+|---|---|
+| ![Snow globe theme](docs/images/settings-globe.png) | ![New Year card theme](docs/images/settings-postcard.png) |
+
 ## Install
 
 Download `SnowFallSetup.exe` from [Releases](../../releases) (per-user install, no admin

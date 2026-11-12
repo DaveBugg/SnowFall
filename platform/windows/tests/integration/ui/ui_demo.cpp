@@ -1342,6 +1342,116 @@ int runSelfTest(HINSTANCE inst, Demo& d) {
     return t.failures == 0 ? 0 : 1;
 }
 
+// ---- showcase: clean screenshots of OUR OWN windows for the README (no selftest state) --------------
+// Places `w` on the cursor-free half of its monitor so nothing is drawn hovered.
+void moveAwayFromCursor(HWND w) {
+    POINT cur{};
+    GetCursorPos(&cur);
+    RECT r{};
+    GetWindowRect(w, &r);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(MonitorFromPoint(cur, MONITOR_DEFAULTTONEAREST), &mi);
+    const RECT& wa = mi.rcWork;
+    const int ww = r.right - r.left, wh = r.bottom - r.top;
+    const bool cursorLeft = cur.x < (wa.left + wa.right) / 2;
+    int x = cursorLeft ? wa.right - ww - 8 : wa.left + 8;
+    int y = wa.top + 8;
+    if (cur.x >= x && cur.x < x + ww && cur.y >= y && cur.y < y + wh) y = (cur.y < (wa.top + wa.bottom) / 2) ? wa.bottom - wh - 8 : wa.top + 8;
+    SetWindowPos(w, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void hideFocusCues(HWND w) {
+    SendMessageW(w, WM_CHANGEUISTATE, MAKEWPARAM(UIS_SET, UISF_HIDEFOCUS | UISF_HIDEACCEL), 0);
+    RedrawWindow(w, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+}
+
+bool saveOwnWindow(HWND w, const std::wstring& path) {
+    RECT r{};
+    GetWindowRect(w, &r);
+    MemBitmap mem(r.right - r.left, r.bottom - r.top);
+    if (!PrintWindow(w, mem.dc, PW_RENDERFULLCONTENT)) return false;
+    return mem.save(path);
+}
+
+int runShowcase(HINSTANCE inst, Demo& d, const std::wstring& outDir, Language lang) {
+    CreateDirectoryW(outDir.c_str(), nullptr);
+    HWND owner = createOwner(inst);
+    if (!owner) return 1;
+    const bool ru = lang == Language::Russian;
+    d.settings = Settings{};
+    d.settings.system.language = lang;
+    d.settings.interaction.tool = Tool::Snowball;
+    auto preset = [](const char* name, WeatherPreset p, int intensity, int wind, int maxHeight) {
+        UserPreset u;
+        u.name = name;
+        u.weather.preset = p;
+        u.weather.intensity = intensity;
+        u.weather.wind = wind;
+        u.maxHeightPxAt96Dpi = maxHeight;
+        return u;
+    };
+    d.settings.userPresets = {preset(ru ? "Уютный вечер" : "Cozy evening", WeatherPreset::Light, 30, -10, 30),
+                              preset(ru ? "Офис" : "Office", WeatherPreset::Normal, 45, 5, 24),
+                              preset(ru ? "Ночная метель" : "Blizzard night", WeatherPreset::Blizzard, 90, 60, 60)};
+    setLanguage(lang);
+    d.window.initialize(inst, makeCallbacks());
+    int saved = 0;
+    const wchar_t* themes[3] = {L"night", L"globe", L"postcard"};
+    for (int t = 0; t < 3; ++t) {
+        d.settings.system.uiTheme = static_cast<UiTheme>(t);
+        d.window.show(d.settings);
+        HWND w = d.window.hwnd();
+        if (!w) return 1;
+        moveAwayFromCursor(w);
+        click(w, IDC_NAV_FIRST);
+        SendMessageW(w, uitest::kMsgPreviewAdvance, 240, 0);   // a winter's worth of drifts in the preview
+        hideFocusCues(w);
+        pump(d.window, 1500);   // flakes in motion, transitions finished
+        hideFocusCues(w);
+        pump(d.window, 100);
+        saved += saveOwnWindow(w, outDir + L"\\settings-" + themes[t] + L".png") ? 1 : 0;
+        if (t == 0) {
+            click(w, IDC_NAV_FIRST + 1);
+            hideFocusCues(w);
+            pump(d.window, 600);
+            saved += saveOwnWindow(w, outDir + L"\\settings-" + themes[t] + L"-drifts.png") ? 1 : 0;
+            click(w, IDC_NAV_FIRST);
+        }
+    }
+    d.window.close();
+    pump(d.window, 100);
+
+    // Quick panel, moved to a fixed spot (not near the real tray).
+    d.tray.create(inst, owner, kTrayCommandMsg);
+    for (int t = 0; t < 3; ++t) {
+        d.settings.system.uiTheme = static_cast<UiTheme>(t);
+        d.tray.setSettings(d.settings);
+        d.tray.setState(trayState(d));
+        // The panel closes when it loses activation (a desktop in use can steal it): retry.
+        bool done = false;
+        for (int attempt = 0; attempt < 5 && !done; ++attempt) {
+            d.tray.showQuickPanel();
+            pump(d.window, 100);
+            HWND qp = findOwnWindow(L"SnowFallQuickPanel");
+            if (!qp || !IsWindowVisible(qp)) continue;
+            moveAwayFromCursor(qp);
+            hideFocusCues(qp);
+            pump(d.window, 1200);
+            hideFocusCues(qp);
+            pump(d.window, 60);
+            if (IsWindowVisible(qp)) done = saveOwnWindow(qp, outDir + L"\\quick-panel-" + themes[t] + L".png");
+        }
+        saved += done ? 1 : 0;
+        d.tray.hideQuickPanel();
+        pump(d.window, 50);
+    }
+    d.tray.remove();
+    DestroyWindow(owner);
+    printf("showcase: %d images in %ls\n", saved, outDir.c_str());
+    return saved == 7 ? 0 : 1;
+}
+
 int runInteractive(HINSTANCE inst, Demo& d) {
     HWND owner = createOwner(inst);
     if (!owner) return 1;
@@ -1374,8 +1484,15 @@ int wmain(int argc, wchar_t** argv) {
     INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES | ICC_TAB_CLASSES | ICC_BAR_CLASSES};
     InitCommonControlsEx(&icc);
     bool selfTest = false;
+    std::wstring showcaseDir;
+    Language showcaseLang = Language::English;
     for (int i = 1; i < argc; ++i) {
         if (lstrcmpiW(argv[i], L"--selftest") == 0) selfTest = true;
+        if (lstrcmpiW(argv[i], L"--showcase") == 0 && i + 1 < argc) showcaseDir = argv[++i];
+        if (lstrcmpiW(argv[i], L"--lang") == 0 && i + 1 < argc) {
+            ++i;
+            showcaseLang = lstrcmpiW(argv[i], L"ru") == 0 ? Language::Russian : Language::English;
+        }
         if (lstrcmpiW(argv[i], L"--dpi") == 0 && i + 1 < argc) uitest::setDpiOverride(static_cast<UINT>(_wtoi(argv[++i])));
     }
     Gdiplus::GdiplusStartupInput gdiplusInput;
@@ -1390,7 +1507,9 @@ int wmain(int argc, wchar_t** argv) {
         demo.exeDir = path;
         demo.exeDir.erase(demo.exeDir.find_last_of(L'\\'));
         g_demo = &demo;
-        rc = selfTest ? runSelfTest(inst, demo) : runInteractive(inst, demo);
+        rc = !showcaseDir.empty() ? runShowcase(inst, demo, showcaseDir, showcaseLang)
+             : selfTest            ? runSelfTest(inst, demo)
+                                   : runInteractive(inst, demo);
         g_demo = nullptr;
     }
     Gdiplus::GdiplusShutdown(gdiplusToken);
