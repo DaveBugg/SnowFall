@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows (app, installer, tests)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        shell: cmd
+        run: build.bat build Release
+      - name: Unit tests
+        shell: cmd
+        working-directory: build
+        run: |
+          snow_sim_tests.exe || exit /b 1
+          snow_settings_tests.exe || exit /b 1
+          snow_settings_win_tests.exe || exit /b 1
+      # Pixel/window integration self-tests need an interactive desktop and are run locally
+      # (tracker_dump, render_demo, ui_demo, e2e_smoke) — see docs/development.md.
+      - name: Package
+        shell: cmd
+        run: |
+          mkdir dist
+          copy build\SnowFallSetup.exe dist\
+          powershell -NoProfile -Command "Compress-Archive -Force -Path build\SnowFall.exe,README.md,LICENSE.md -DestinationPath dist\SnowFall-portable-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SnowFall-windows-x64
+          path: dist/*
+
+  core:
+    name: Portable core (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build core and tests
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, core]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SnowFall-windows-x64
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          draft: true

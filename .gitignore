@@ -1,0 +1,6 @@
+build*/
+build*.configure.log
+dist/
+*.user
+.vs/
+.serena/

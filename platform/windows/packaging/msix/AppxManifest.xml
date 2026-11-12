@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SnowFall MSIX manifest (full-trust Win32 desktop app). Keep Version in sync with CMakeLists.txt. -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap desktop rescap">
+
+  <Identity Name="SnowFall" Publisher="CN=SnowFall Dev" Version="0.1.0.0" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>SnowFall</DisplayName>
+    <PublisherDisplayName>SnowFall</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Interactive snow over the Windows desktop: it settles on windows and the taskbar.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="ru-RU" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application Id="SnowFall" Executable="SnowFall.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="SnowFall"
+        Description="Snow on your desktop"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" ShortName="SnowFall" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#123480" />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- Packaged apps cannot use HKCU\...\Run (registry writes are virtualized); this startup
+             task appears in Settings > Apps > Startup and is disabled until the user enables it. -->
+        <desktop:Extension Category="windows.startupTask" Executable="SnowFall.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="SnowFallStartup" Enabled="false" DisplayName="SnowFall" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
