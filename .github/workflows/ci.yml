@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "mac/**"]
     tags: ["v*"]
   pull_request:
 
@@ -53,6 +53,20 @@ jobs:
           cmake --build build --parallel
       - name: Unit tests
         run: ctest --test-dir build --output-on-failure
+      # macOS: the app bundle / dmg (when platform/macos exists) are uploaded for manual testing.
+      - name: Collect macOS app
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist
+          find build -maxdepth 3 -name "*.dmg" -exec cp {} dist/ \; || true
+          if [ -d build/SnowFall.app ]; then ditto -c -k --keepParent build/SnowFall.app dist/SnowFall-macOS-app.zip; fi
+          ls -la dist
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'macOS'
+        with:
+          name: SnowFall-macos
+          path: dist/*
+          if-no-files-found: ignore
 
   release:
     name: GitHub release
