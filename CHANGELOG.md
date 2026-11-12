@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — 2026-11-12
+
+- Settings: the live preview label now shows the real speed (×4); user-preset chips no longer
+  cut long names, and the quick panel shows three presets without a scrollbar.
+- README: clean English screenshots (Russian ones in README.ru), screenshots of all three themes.
+- CI: GitHub Actions updated to Node 24 versions.
+
 ## 0.1.0 — 2026-11-12
 
 First public version for Windows 11 x64.
