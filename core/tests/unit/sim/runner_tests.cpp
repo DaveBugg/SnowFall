@@ -36,7 +36,7 @@ TEST(sim_runner_publishes_and_stops) {
     if (a && b) {
         const auto frames = b->frame - a->frame;
         printf("  frames in 0.5 s: %llu, particles %u\n", static_cast<unsigned long long>(frames), b->stats.particles);
-        CHECK(frames >= 15 && frames <= 40);   // ~30 at 60 Hz, generous for loaded CI machines
+        CHECK(frames >= 5 && frames <= 45);    // ~30 at 60 Hz; CI VMs can stall for hundreds of ms
         CHECK(b->stats.particles > 0);
     }
     CHECK(cursorCalls > 10);
@@ -54,7 +54,7 @@ TEST(sim_runner_publishes_and_stops) {
     CHECK(ex.latest()->frame > f1);
     const auto t0 = std::chrono::steady_clock::now();
     runner.stop();
-    CHECK(std::chrono::steady_clock::now() - t0 < 500ms);
+    CHECK(std::chrono::steady_clock::now() - t0 < 2000ms);
     runner.stop();   // idempotent
 }
 

@@ -1,11 +1,35 @@
 #include "settings/json.h"
 
+#include <cerrno>
 #include <charconv>
+#include <clocale>
+#include <cstdio>
+#include <cstdlib>
 #include <cmath>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
 namespace snow::json {
+
+namespace {
+// Locale-independent strtod for an already validated JSON number token.
+bool parseDouble(std::string_view token, double& out) {
+    std::string s(token);
+    const struct lconv* lc = std::localeconv();
+    const char dp = (lc && lc->decimal_point && lc->decimal_point[0]) ? lc->decimal_point[0] : '.';
+    if (dp != '.')
+        for (char& c : s)
+            if (c == '.') c = dp;
+    errno = 0;
+    char* end = nullptr;
+    const double v = std::strtod(s.c_str(), &end);
+    if (end != s.c_str() + s.size() || errno == ERANGE || !std::isfinite(v)) return false;
+    out = v;
+    return true;
+}
+}  // namespace
 
 // ---------------------------------------------------------------- Value
 
@@ -392,9 +416,11 @@ private:
             if (!isDigit()) return fail("expected a digit in the exponent");
             while (isDigit()) ++i_;
         }
+        // The token is already validated as a JSON number above. Parse it with the C library
+        // (floating-point std::from_chars needs a very recent macOS) on a NUL-terminated copy;
+        // the decimal point is always '.', so normalise for a locale that might use ','.
         double d = 0.0;
-        const auto res = std::from_chars(s_.data() + start, s_.data() + i_, d);
-        if (res.ec != std::errc() || res.ptr != s_.data() + i_) {
+        if (!parseDouble(s_.substr(start, i_ - start), d)) {
             i_ = start;
             return fail("number out of range");
         }
@@ -455,13 +481,21 @@ void writeNumber(std::string& out, double d) {
         return;
     }
     char buf[40];
-    std::to_chars_result res{};
     if (d == std::floor(d) && std::fabs(d) < 9007199254740992.0) {
-        res = std::to_chars(buf, buf + sizeof(buf), static_cast<long long>(d));
-    } else {
-        res = std::to_chars(buf, buf + sizeof(buf), d);   // shortest round-trip form
+        const auto res = std::to_chars(buf, buf + sizeof(buf), static_cast<long long>(d));
+        out.append(buf, res.ptr);
+        return;
     }
-    out.append(buf, res.ptr);
+    // Shortest of %.15g / %.16g / %.17g that round-trips (floating-point std::to_chars needs
+    // macOS 13.3+). snprintf may use the locale's decimal separator, so force '.'.
+    for (int precision = 15; precision <= 17; ++precision) {
+        std::snprintf(buf, sizeof buf, "%.*g", precision, d);
+        for (char* p = buf; *p; ++p)
+            if (*p == ',') *p = '.';
+        double back = 0;
+        if (parseDouble(buf, back) && back == d) break;
+    }
+    out += buf;
 }
 
 void newline(std::string& out, int indent, int level) {
