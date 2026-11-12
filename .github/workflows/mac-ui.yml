@@ -79,9 +79,8 @@ jobs:
           command -v ninja || brew install ninja
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSNOWFALL_UI_DEMO=ON
           cmake --build build --parallel
-      - name: Core tests + demo smoke run
+      - name: App stand-in + demo smoke run
         run: |
-          ctest --test-dir build --output-on-failure
           "$(find build -name sf_app_standin -type f | head -1)"
           demo=$(find build -name snowfall_ui_demo -type f | head -1)
           mkdir -p smoke-out

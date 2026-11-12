@@ -106,6 +106,7 @@ final class SettingsWindowController: NSObject, SFSettingsWindow, NSWindowDelega
         w.delegate = self
         let root = SettingsRootView(store: store, onClose: { [weak self] in self?.close() })
         let host = NSHostingView(rootView: root)
+        host.sizingOptions = []   // the window keeps its fixed size; SwiftUI does not resize it
         host.frame = NSRect(origin: .zero, size: SettingsLayout.size)
         w.contentView = host
         // With a full-size content view the frame is what we want the content to be.

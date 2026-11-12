@@ -49,6 +49,7 @@ struct SettingsRootView: View {
         .frame(minWidth: SettingsLayout.size.width, maxWidth: .infinity, minHeight: SettingsLayout.size.height,
                maxHeight: .infinity)
         .background(p.bg.c)
+        .ignoresSafeArea()   // the header runs under the transparent title bar
         .environment(\.palette, p)
         .preferredColorScheme(p.dark ? .dark : .light)
         .alert(store.strings["AppName"], isPresented: $confirmRestore) {
