@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-11-12
 
 First public version for Windows 11 x64.
 
@@ -13,4 +13,7 @@ First public version for Windows 11 x64.
 - Toy snowplow for the taskbar, garland, New Year fireworks.
 - Settings window with three themes and live preview, tray quick panel, user presets,
   per-application exclusions, Russian and English UI.
-- Per-user installer with migration from the earlier "Windows Snow" builds, portable zip, MSIX.
+- Snowfall on every monitor (stacked monitors), snowplows on every taskbar with joined routes
+  for side-by-side taskbars; snowballs knock icicles down.
+- Per-user installer with migration from the earlier "Windows Snow" builds, portable zip
+  (an unsigned MSIX can be built locally).
