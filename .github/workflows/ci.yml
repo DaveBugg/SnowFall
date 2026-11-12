@@ -47,22 +47,35 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      # Ninja on macOS: CMake builds Swift (platform/macos/ui) only with Ninja or Xcode.
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: command -v ninja || brew install ninja
       - name: Build core and tests
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          if [ "$RUNNER_OS" = "macOS" ]; then GEN="-G Ninja"; else GEN=""; fi
+          cmake -S . -B build $GEN -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel
       - name: Unit tests
         run: ctest --test-dir build --output-on-failure
+      # Full self-test log of the app (Metal, overlays, tracker) for the record.
+      - name: App self-test (macOS)
+        if: runner.os == 'macOS' && !cancelled()
+        run: |
+          if [ -x build/SnowFall.app/Contents/MacOS/SnowFall ]; then build/SnowFall.app/Contents/MacOS/SnowFall --selftest; fi
       # macOS: the app bundle / dmg (when platform/macos exists) are uploaded for manual testing.
       - name: Collect macOS app
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && !cancelled()
         run: |
           mkdir -p dist
           find build -maxdepth 3 -name "*.dmg" -exec cp {} dist/ \; || true
           if [ -d build/SnowFall.app ]; then ditto -c -k --keepParent build/SnowFall.app dist/SnowFall-macOS-app.zip; fi
           ls -la dist
       - uses: actions/upload-artifact@v7
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && !cancelled()
         with:
           name: SnowFall-macos
           path: dist/*
