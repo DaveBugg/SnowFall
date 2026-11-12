@@ -73,9 +73,10 @@ target_link_libraries(snowfall_ui PUBLIC "-framework AppKit" "-framework SwiftUI
 if(SNOWFALL_UI_DEMO)
   add_executable(snowfall_ui_demo demo/main.mm demo/demo_strings.mm demo/demo_strings.h)
   target_include_directories(snowfall_ui_demo PRIVATE "${SF_BRIDGE_DIR}" "${SF_CORE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/selftest" "${CMAKE_CURRENT_SOURCE_DIR}/demo")
-  target_compile_options(snowfall_ui_demo PRIVATE -fobjc-arc -Wall -Wextra)
+  # Language-guarded: when swiftc drives the link it would otherwise receive these too.
+  target_compile_options(snowfall_ui_demo PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc;-Wall;-Wextra>")
   if(SNOWFALL_UI_WERROR)
-    target_compile_options(snowfall_ui_demo PRIVATE -Werror)
+    target_compile_options(snowfall_ui_demo PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-Werror>")
   endif()
   set_target_properties(snowfall_ui_demo PROPERTIES CXX_STANDARD 20 OBJCXX_STANDARD 20)
   target_link_libraries(snowfall_ui_demo PRIVATE snowfall_ui)

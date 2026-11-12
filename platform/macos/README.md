@@ -54,6 +54,29 @@ settings model/JSON) already builds and passes its unit tests on macOS in CI.
 Each phase ends with a build in CI and a checklist for a manual test on the M2 (screenshots +
 the log file are enough for remote diagnosis).
 
+## UI module (`platform/macos/ui`)
+
+SwiftUI settings window + quick panel behind the contract in `bridge/SFBridge.h`
+(static Swift library `snowfall_ui`, module `SnowFallUI`). The app shell consumes it with:
+
+```cmake
+# platform/macos/CMakeLists.txt — languages must be enabled HERE (the directory common to the
+# app target and the UI), and the build needs -G Ninja or -G Xcode (Makefiles cannot do Swift).
+enable_language(OBJC OBJCXX Swift)
+add_subdirectory(ui)
+target_link_libraries(SnowFall PRIVATE snowfall_ui)   # brings -ObjC, AppKit/SwiftUI, the bridge include dir
+```
+
+The app finds the UI only by name: `NSClassFromString(@"SFUIFactory")` (conforms to
+`SFUIFactoryProtocol`), so no generated Swift header is needed. Settings JSON goes in and out
+whole; keys the UI does not model are preserved. Hotkeys are stored in the core grammar
+(`Ctrl+Alt+Shift+Win+K`, see `core/settings/hotkey.h`) and shown as Ctrl / Option / Shift / Cmd.
+
+`snowfall_ui_demo --selftest <dir>` (built in the standalone configuration
+`cmake -S platform/macos/ui -B build-ui -G Ninja`) runs the UI against a fake app, checks what
+reaches `-applySettingsJSON:` and renders every page in every theme to PNG; CI
+(`.github/workflows/mac-ui.yml`) uploads them as the `snowfall-ui-selftest` artifact.
+
 ## Known limitations on macOS
 
 - The system cursor stays visible in interaction mode (the tool is drawn next to it).
