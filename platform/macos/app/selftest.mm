@@ -298,23 +298,15 @@ int runSelfTest() {
         const bool saved = store.save(s);
         const bool loaded = store.load(back);
         const std::string path = toUtf8(store.path());
-        std::string head;
-        if (FILE* f = std::fopen(path.c_str(), "rb")) {
-            char buf[48] = {};
-            const size_t n = std::fread(buf, 1, sizeof buf - 1, f);
-            std::fclose(f);
-            for (size_t i = 0; i < n; ++i) head += fmt("%02x", static_cast<unsigned char>(buf[i]));
-        }
         check(saved && loaded && back == expected, "settings: save/load round trip",
-              saved && loaded && back == expected ? "" : fmt("saved=%d loaded=%d equal=%d file=%s", saved, loaded,
-                                                             back == expected, head.c_str()));
+              fmt("saved=%d loaded=%d equal=%d", saved, loaded, back == expected));
         if (FILE* f = std::fopen(path.c_str(), "wb")) {
             std::fputs("{ not json", f);
             std::fclose(f);
         }
         Settings c;
-        const bool loaded = store.load(c);
-        check(!loaded && c == Settings{} && access((path + ".corrupt").c_str(), F_OK) == 0,
+        const bool loadedCorrupt = store.load(c);
+        check(!loadedCorrupt && c == Settings{} && access((path + ".corrupt").c_str(), F_OK) == 0,
               "settings: corrupt file -> defaults + .corrupt kept");
     }
 

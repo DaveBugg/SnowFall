@@ -1,7 +1,7 @@
 # SnowFall for macOS — port plan
 
-Status: not started. The portable `core/` (simulation, drifts, tools, snowmen, snowplow,
-settings model/JSON) already builds and passes its unit tests on macOS in CI.
+Status: phases 1-4 implemented (branch `mac/app`), built and self-tested in CI on
+macos-latest; awaiting the first manual test on the M2 (checklist at the end).
 
 ## Decisions
 
@@ -19,10 +19,10 @@ settings model/JSON) already builds and passes its unit tests on macOS in CI.
 | Piece | Windows | macOS |
 |---|---|---|
 | Overlay | per-monitor layered click-through window + D3D11 + DirectComposition | one borderless `NSWindow` per `NSScreen`: level above normal windows (below the menu bar/Dock menus), `ignoresMouseEvents = YES`, `collectionBehavior = canJoinAllSpaces | stationary | fullScreenAuxiliary | ignoresCycle`, transparent `CAMetalLayer` |
-| Frame pacing | vsync Present | `CVDisplayLink` (macOS 13) / `CADisplayLink` (14+) per screen |
+| Frame pacing | vsync Present | one render thread for all screens, woken by a `CVDisplayLink`; 30/60 FPS cap on top |
 | Window tracking → `DesktopLayout` | `EnumWindows` + WinEvent hooks | `CGWindowListCopyWindowInfo(onScreenOnly)` on a background queue at ~30 Hz (bounds, layer, owner PID, Z-order; window titles are never requested, so no Screen Recording permission). Diff against the last layout, publish only on change; faster polling while a window is being dragged (mouse button down). |
 | Coordinates | physical pixels, `dpiScale` per monitor | CG global coordinates (top-left origin, points) are used as-is; `dpiScale = 1` for simulation sizes; the renderer draws at `backingScaleFactor` for crisp output |
-| "Taskbar" surface | `Shell_TrayWnd` | the Dock (bottom/left/right, auto-hide aware: derived from `NSScreen.frame` vs `visibleFrame` and the Dock's window from the window list); screen bottom when the Dock is hidden or on another side |
+| "Taskbar" surface | `Shell_TrayWnd` | a bottom Dock (height from `NSScreen.frame` vs `visibleFrame`; width/centre from the Accessibility API when trusted, otherwise estimated from the Dock preferences). The rectangle stops 1 pt above the screen bottom so the screen-bottom drift continues left and right of the Dock. Left/right/auto-hidden Dock: screen bottom only |
 | Fullscreen auto-pause | foreground window covers the monitor | frontmost app's window covers its screen / the screen is in a fullscreen Space |
 | Interaction input | `WH_MOUSE_LL` only while the mode is on | `CGEventTap` only while the mode is on (needs the Accessibility permission — requested with an explanation the first time the user enters interaction mode) |
 | Hold chord | `GetAsyncKeyState` polling | `NSEvent.modifierFlags` polling (no permission needed) |
@@ -54,6 +54,49 @@ settings model/JSON) already builds and passes its unit tests on macOS in CI.
 Each phase ends with a build in CI and a checklist for a manual test on the M2 (screenshots +
 the log file are enough for remote diagnosis).
 
+## Building and running
+
+```sh
+# universal app + dmg (what CI ships), Xcode generator
+cmake -S . -B build -G Xcode && cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure      # core + mac_unit + mac_selftest
+# quicker local loop (host architecture only)
+cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-ninja
+build-ninja/SnowFall.app/Contents/MacOS/SnowFall --selftest
+```
+
+The root CMake sets `CMAKE_OSX_DEPLOYMENT_TARGET=13.0`, and `arm64;x86_64` for the Xcode
+generator (CMake cannot build multi-arch Swift with Ninja). Unix Makefiles still work but
+build the app without the SwiftUI module (menu-only fallback).
+
+Command line: `SnowFall [--data-dir <dir>] [--settings] [--exit] [--selftest]`. A second
+launch (or a double-click while running) opens the settings of the running instance.
+
+Files: settings `~/Library/Application Support/SnowFall/settings.json` (atomic write,
+`.corrupt` kept), log `~/Library/Logs/SnowFall/snowfall.log` (1 MB rotation), crash reports
+`crash-*.txt` next to the log. With `--data-dir` everything lives in that directory.
+
+### Shell layout (`platform/macos`)
+
+| Path | What |
+|---|---|
+| `app/` | `main.mm` (single instance, logging, NSApplication), `AppHost` (wiring, governor, settings, hotkeys, menu), `SFAppActionsImpl` (bridge), status item, `InteractionController` (event tap), preview view, strings, icon art, `selftest.mm` |
+| `overlay/` | `OverlaySystem`: per-screen windows, `CAMetalLayer`, render thread |
+| `render/` | `MetalRenderer` (shared by overlays, preview, self-test) and `msl_translate` — the Windows HLSL (`platform/windows/rendering/d3d11/shaders.h`) is translated to MSL at start-up, so both platforms draw from one shader source; `drift_mesh.cpp` is shared too |
+| `tracker/` | `desktop_model` (pure: coordinates, Dock geometry, classification, layout builder) and `WindowTracker` (CGWindowList poller) |
+| `system/` | settings store, Carbon hotkeys + key map, login item, power/lock/sleep events, crash handler, Accessibility helpers |
+| `diagnostics/` | logger backend (`snow_diag` on macOS) |
+| `tests/` | `snow_mac_tests` (ctest `mac_unit`) |
+| `packaging/` | `Info.plist.in`, `make_dmg.sh` (`make_dmg` target, part of ALL) |
+| `tools/` | `snow_icon_gen`: renders `AppIcon.icns` at build time |
+
+What CI verifies: compilation (universal), core + mac unit tests, and `--selftest`, which
+compiles the translated shaders on the runner's GPU and checks pixels of offscreen renders
+(transparency, drift colour, scissor clipping, all 81 sprite variants non-empty, 1x and 2x),
+creates the overlay windows and presents frames, runs the window tracker, the simulation
+thread, Carbon hotkeys, the settings store, and finally starts the whole `AppHost` with the
+SwiftUI module and opens the settings window. It never reads the screen.
+
 ## UI module (`platform/macos/ui`)
 
 SwiftUI settings window + quick panel behind the contract in `bridge/SFBridge.h`
@@ -81,7 +124,11 @@ reaches `-applySettingsJSON:` and renders every page in every theme to PNG; CI
 
 ## Known limitations on macOS
 
-- The system cursor stays visible in interaction mode (the tool is drawn next to it).
+- The system cursor stays visible in interaction mode (the tool is drawn 14x18 pt to the lower
+  right of the arrow; the brush ring stays centred on the pointer).
+- Clicking the snow needs the Accessibility permission (event tap). Without it interaction mode
+  is "view only": the tool follows the pointer, clicks reach the apps.
+- Without the Accessibility permission the Dock width is estimated from its preferences.
 - Window tracking is polled, so a drift may trail a fast-dragged window by a frame or two.
 - Without notarization, Gatekeeper asks for confirmation on the first launch.
 - Snow is not drawn over the menu bar, Notification Center, Mission Control or the lock screen.
