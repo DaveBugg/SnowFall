@@ -54,14 +54,14 @@ set(SF_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SF_BRIDGE_MODULE_DIR "${CMAKE_CURRENT_BINARY_DIR}/SFBridgeModule")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SFBridge.modulemap.in" "${SF_BRIDGE_MODULE_DIR}/module.modulemap" @ONLY)
 
-set(CMAKE_Swift_LANGUAGE_VERSION 5.0)   # Xcode generator otherwise falls back to Swift 4
+set(CMAKE_Swift_LANGUAGE_VERSION 5)
 
 file(GLOB SF_UI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Sources/SnowFallUI/*.swift")
 add_library(snowfall_ui STATIC ${SF_UI_SOURCES})
 set_target_properties(snowfall_ui PROPERTIES
   Swift_MODULE_NAME SnowFallUI
-  Swift_LANGUAGE_VERSION 5.0
-  XCODE_ATTRIBUTE_SWIFT_VERSION 5.0
+  Swift_LANGUAGE_VERSION 5
+  XCODE_ATTRIBUTE_SWIFT_VERSION 5.0   # Xcode generator otherwise falls back to Swift 4
   Swift_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/swift")
 target_compile_options(snowfall_ui PUBLIC
   "$<$<COMPILE_LANGUAGE:Swift>:-I${SF_BRIDGE_MODULE_DIR}>")
