@@ -108,7 +108,9 @@ final class SettingsWindowController: NSObject, SFSettingsWindow, NSWindowDelega
         let host = NSHostingView(rootView: root)
         host.frame = NSRect(origin: .zero, size: SettingsLayout.size)
         w.contentView = host
-        w.setContentSize(SettingsLayout.size)
+        // With a full-size content view the frame is what we want the content to be.
+        w.setFrame(NSRect(origin: w.frame.origin, size: SettingsLayout.size), display: false)
+        store.titlebarHeight = max(0, w.frame.height - w.contentLayoutRect.height)
         w.center()
         w.setFrameAutosaveName("SnowFallSettings")
         hosting = host

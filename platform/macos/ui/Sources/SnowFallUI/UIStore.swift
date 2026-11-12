@@ -40,6 +40,8 @@ final class UIStore: ObservableObject {
     /// Self-test: decorative animation stops at a fixed frame so screenshots are reproducible.
     @Published var frozen = false
     @Published var page: SettingsPage = .snow
+    /// Height of the (transparent) title bar the header extends under.
+    @Published var titlebarHeight: CGFloat = 28
     /// Quick panel: the running-apps picker replaces the panel content.
     @Published var showPicker = false
     @Published var presetMessage: (text: String, role: MessageRole) = ("", .secondary)
@@ -51,7 +53,7 @@ final class UIStore: ObservableObject {
     private(set) var loaded = false
 
     /// The preview view from -makePreviewView (settings window only), fed with every change.
-    weak var preview: NSView?
+    var preview: NSView?
 
     init(actions: any SFAppActions) {
         self.actions = actions

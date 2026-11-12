@@ -5,11 +5,11 @@ import SFBridge
 import SwiftUI
 
 enum SettingsLayout {
-    static let size = CGSize(width: 940, height: 660)
-    static let titlebar: CGFloat = 28
+    /// Whole window content, title bar area included (the header runs under the traffic lights).
+    static let size = CGSize(width: 980, height: 700)
     static let headerContent: CGFloat = 64
-    static let sidebar: CGFloat = 178
-    static let rightColumn: CGFloat = 252
+    static let sidebar: CGFloat = 186
+    static let rightColumn: CGFloat = 246
 }
 
 struct SettingsRootView: View {
@@ -46,7 +46,8 @@ struct SettingsRootView: View {
                 }
             }
         }
-        .frame(width: SettingsLayout.size.width, height: SettingsLayout.size.height)
+        .frame(minWidth: SettingsLayout.size.width, maxWidth: .infinity, minHeight: SettingsLayout.size.height,
+               maxHeight: .infinity)
         .background(p.bg.c)
         .environment(\.palette, p)
         .preferredColorScheme(p.dark ? .dark : .light)
@@ -133,7 +134,7 @@ struct SettingsHeader: View {
             .padding(.bottom, p.garland ? 14 : 10)
             .frame(height: SettingsLayout.headerContent + (p.garland ? 6 : 0), alignment: .center)
         }
-        .frame(height: SettingsLayout.titlebar + SettingsLayout.headerContent)
+        .frame(height: store.titlebarHeight + SettingsLayout.headerContent)
     }
 }
 
@@ -255,7 +256,7 @@ struct Sidebar: View {
                         Text(store.strings[page.titleId])
                             .font(.system(size: UIMetrics.font, weight: selected ? .semibold : .regular))
                             .foregroundColor(selected ? p.navTextSel.c : p.navText.c)
-                            .lineLimit(1).minimumScaleFactor(0.8)
+                            .lineLimit(1).minimumScaleFactor(0.7)
                         Spacer(minLength: 0)
                     }
                     .padding(.leading, 12)

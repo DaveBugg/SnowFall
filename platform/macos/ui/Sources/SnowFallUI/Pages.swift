@@ -591,6 +591,7 @@ struct AboutPage: View {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(t["AppName"]).font(.system(size: 24, weight: .semibold, design: .rounded)).foregroundColor(p.heading.c)
                         Text(t["PoweredBy"]).font(.system(size: UIMetrics.font)).foregroundColor(p.textSecondary.c)
+                            .fixedSize()
                     }
                     Text(t.format("AboutVersionFmt", store.diagnostics.version.isEmpty ? "—" : store.diagnostics.version))
                         .font(.system(size: UIMetrics.font)).foregroundColor(p.textSecondary.c)

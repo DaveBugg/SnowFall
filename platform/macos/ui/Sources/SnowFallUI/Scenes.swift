@@ -347,7 +347,7 @@ struct HeaderBackground: View {
                 let sy = 4 + (Double(i) * 37.1).truncatingRemainder(dividingBy: size.height * 0.6)
                 SceneDraw.ellipse(ctx, sx, sy, 0.7, 0.7, Color.white.opacity(0.3 + 0.1 * Double(i % 4)))
             }
-            let mx = size.width * 0.62, my = size.height * 0.42
+            let mx = size.width * 0.5, my = size.height * 0.42
             Glyphs.glow(ctx, center: CGPoint(x: mx, y: my), radius: 40, color: RGB(0xD2E6FF).c(0.18))
             SceneDraw.ellipse(ctx, mx, my, 9, 9, RGB(0xF0F6FF).c(0.92))
             SceneDraw.ellipse(ctx, mx + 4, my - 2.5, 8, 8, p.headerTop.mix(p.headerBottom, 0.4).c)

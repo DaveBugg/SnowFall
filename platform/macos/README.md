@@ -64,7 +64,9 @@ SwiftUI settings window + quick panel behind the contract in `bridge/SFBridge.h`
 # app target and the UI), and the build needs -G Ninja or -G Xcode (Makefiles cannot do Swift).
 enable_language(OBJC OBJCXX Swift)
 add_subdirectory(ui)
-target_link_libraries(SnowFall PRIVATE snowfall_ui)   # brings -ObjC, AppKit/SwiftUI, the bridge include dir
+# ... add_executable(SnowFall ...), its compile options ...
+snowfall_ui_attach(SnowFall)   # links snowfall_ui (-ObjC, AppKit/SwiftUI, bridge include dir) and keeps
+                               # the root's -Wall / SNOW_VERSION="…" away from the swiftc link step
 ```
 
 The app finds the UI only by name: `NSClassFromString(@"SFUIFactory")` (conforms to

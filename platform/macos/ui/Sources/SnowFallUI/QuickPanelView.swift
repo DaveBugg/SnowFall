@@ -87,14 +87,15 @@ struct QuickPanelView: View {
             if s.userPresets.isEmpty {
                 HintText(text: t["QuickNoPresets"])
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    FlowLayout(spacing: 6, lineSpacing: 6) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
                         ForEach(Array(s.userPresets.enumerated()), id: \.offset) { i, preset in
                             PresetChip(name: preset.name, deletable: false, apply: { store.applyPreset(at: i) })
                         }
                     }
+                    .padding(.vertical, 1)
                 }
-                .frame(maxHeight: 64)
+                .frame(height: 32)
             }
             HStack(spacing: 10) {
                 Text(t.format("QuickExclusionsFmt", s.system.excludedProcesses.count))

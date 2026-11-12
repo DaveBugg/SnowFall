@@ -11,7 +11,8 @@
 #   * from the app (platform/macos/CMakeLists.txt):
 #         enable_language(OBJC OBJCXX Swift)     # in platform/macos, BEFORE add_subdirectory(ui)
 #         add_subdirectory(ui)
-#         target_link_libraries(SnowFall PRIVATE snowfall_ui)
+#         ...                                     # add_executable(SnowFall ...) and its own options
+#         snowfall_ui_attach(SnowFall)            # links snowfall_ui, keeps C/C++ flags away from swiftc
 #     Swift needs the Ninja or Xcode generator (Unix Makefiles cannot compile Swift).
 cmake_minimum_required(VERSION 3.24)
 
@@ -53,11 +54,14 @@ set(SF_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SF_BRIDGE_MODULE_DIR "${CMAKE_CURRENT_BINARY_DIR}/SFBridgeModule")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SFBridge.modulemap.in" "${SF_BRIDGE_MODULE_DIR}/module.modulemap" @ONLY)
 
+set(CMAKE_Swift_LANGUAGE_VERSION 5.0)   # Xcode generator otherwise falls back to Swift 4
+
 file(GLOB SF_UI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Sources/SnowFallUI/*.swift")
 add_library(snowfall_ui STATIC ${SF_UI_SOURCES})
 set_target_properties(snowfall_ui PROPERTIES
   Swift_MODULE_NAME SnowFallUI
-  Swift_LANGUAGE_VERSION 5
+  Swift_LANGUAGE_VERSION 5.0
+  XCODE_ATTRIBUTE_SWIFT_VERSION 5.0
   Swift_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/swift")
 target_compile_options(snowfall_ui PUBLIC
   "$<$<COMPILE_LANGUAGE:Swift>:-I${SF_BRIDGE_MODULE_DIR}>")
@@ -70,6 +74,25 @@ target_include_directories(snowfall_ui INTERFACE "${SF_BRIDGE_DIR}")
 target_link_options(snowfall_ui INTERFACE "LINKER:-ObjC")
 target_link_libraries(snowfall_ui PUBLIC "-framework AppKit" "-framework SwiftUI" "-framework Combine")
 
+# Links `target` (an Objective-C++ executable such as the app) with the UI module.
+# A target linking Swift code is linked by swiftc, which receives the target's compile options
+# and definitions too; the root project's -Wall / SNOW_VERSION="…" would break that link, so the
+# options already set on `target` are restricted to the non-Swift languages. Call it after the
+# target's own target_compile_options / definitions.
+function(snowfall_ui_attach target)
+  target_link_libraries(${target} PRIVATE snowfall_ui)
+  foreach(prop COMPILE_OPTIONS COMPILE_DEFINITIONS)
+    get_target_property(vals ${target} ${prop})
+    if(vals)
+      set(guarded "")
+      foreach(v IN LISTS vals)
+        list(APPEND guarded "$<$<NOT:$<COMPILE_LANGUAGE:Swift>>:${v}>")
+      endforeach()
+      set_property(TARGET ${target} PROPERTY ${prop} "${guarded}")
+    endif()
+  endforeach()
+endfunction()
+
 if(SNOWFALL_UI_DEMO)
   add_executable(snowfall_ui_demo demo/main.mm demo/demo_strings.mm demo/demo_strings.h)
   target_include_directories(snowfall_ui_demo PRIVATE "${SF_BRIDGE_DIR}" "${SF_CORE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/selftest" "${CMAKE_CURRENT_SOURCE_DIR}/demo")
@@ -79,5 +102,5 @@ if(SNOWFALL_UI_DEMO)
     target_compile_options(snowfall_ui_demo PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-Werror>")
   endif()
   set_target_properties(snowfall_ui_demo PROPERTIES CXX_STANDARD 20 OBJCXX_STANDARD 20)
-  target_link_libraries(snowfall_ui_demo PRIVATE snowfall_ui)
+  snowfall_ui_attach(snowfall_ui_demo)
 endif()

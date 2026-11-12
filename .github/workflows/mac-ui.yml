@@ -60,7 +60,7 @@ jobs:
           add_subdirectory(ui)
           add_executable(sf_app_standin standin_main.mm)
           target_compile_options(sf_app_standin PRIVATE -fobjc-arc)
-          target_link_libraries(sf_app_standin PRIVATE snowfall_ui)
+          snowfall_ui_attach(sf_app_standin)
           EOF
             cat > platform/macos/standin_main.mm <<'EOF'
           #import <AppKit/AppKit.h>

@@ -41,7 +41,7 @@ struct HotkeyRow: View {
         HStack(spacing: 10) {
             Text(label).font(.system(size: UIMetrics.font)).foregroundColor(p.text.c)
                 .lineLimit(1).minimumScaleFactor(0.8)
-                .frame(width: 180, alignment: .leading)
+                .frame(width: 160, alignment: .leading)
                 .accessibilityHidden(true)
             Button {
                 recording ? stop() : start()
@@ -51,7 +51,7 @@ struct HotkeyRow: View {
                     .foregroundColor(text.isEmpty && !recording ? p.textSecondary.c : p.fieldText.c)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .padding(.horizontal, 10)
-                    .frame(width: 190, height: 30, alignment: .leading)
+                    .frame(width: 170, height: 30, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 6).fill(p.field.c))
                     .overlay(RoundedRectangle(cornerRadius: 6)
                         .strokeBorder(recording ? p.accent.c : p.fieldBorder.c, lineWidth: recording ? 2 : 1))
@@ -180,7 +180,7 @@ struct ProcessPicker: View {
                     }
                 }
             }
-            .frame(height: compact ? 210 : 240)
+            .frame(height: compact ? 300 : 240)
             .background(RoundedRectangle(cornerRadius: 6).fill(p.field.c))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(p.fieldBorder.c, lineWidth: 1))
             HStack(spacing: 10) {
