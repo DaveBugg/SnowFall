@@ -56,9 +56,9 @@ jobs:
         run: command -v ninja || brew install ninja
       - name: Build core and tests
         run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then GEN="-G Ninja"; else GEN=""; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then GEN="-G Ninja"; KEEP="-- -k 0"; else GEN=""; KEEP=""; fi
           cmake -S . -B build $GEN -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel
+          cmake --build build --parallel $KEEP
       - name: Unit tests
         run: ctest --test-dir build --output-on-failure
       # Full self-test log of the app (Metal, overlays, tracker) for the record.

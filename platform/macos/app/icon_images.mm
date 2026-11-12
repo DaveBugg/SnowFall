@@ -44,7 +44,7 @@ NSImage* makeMenuBarImage(bool paused) {
         [image addRepresentation:rep];
         CGImageRelease(cg);
     }
-    image.template = YES;   // AppKit tints it for light / dark menu bars
+    [image setTemplate:YES];   // AppKit tints it for light / dark menu bars (`template` is a C++ keyword)
     image.accessibilityDescription = @"SnowFall";
     return image;
 }
