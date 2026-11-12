@@ -1,60 +1,33 @@
 #include "settings/json.h"
 
-#include <charconv>
-#include <cmath>
-#include <system_error>
-#include <utility>
-
-#if defined(__APPLE__)
 #include <cerrno>
+#include <charconv>
+#include <clocale>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <string>
-#include <xlocale.h>
-#endif
+#include <string_view>
+#include <system_error>
+#include <utility>
 
 namespace snow::json {
 
 namespace {
-// Floating-point <charconv> is unavailable in Apple's libc++ for the macOS 13 deployment
-// target (from_chars(double): macOS 26, to_chars(double): 13.3). On Apple platforms the same
-// results come from the C library with the "C" locale; everywhere else <charconv> is used.
-#if defined(__APPLE__)
-locale_t cLocale() {
-    static const locale_t loc = newlocale(LC_ALL_MASK, "C", nullptr);
-    return loc;
-}
-#endif
-
-bool parseDouble(const char* first, const char* last, double& out) {
-#if defined(__APPLE__)
-    const std::string text(first, last);
-    char* end = nullptr;
+// Locale-independent strtod for an already validated JSON number token.
+bool parseDouble(std::string_view token, double& out) {
+    std::string s(token);
+    const struct lconv* lc = std::localeconv();
+    const char dp = (lc && lc->decimal_point && lc->decimal_point[0]) ? lc->decimal_point[0] : '.';
+    if (dp != '.')
+        for (char& c : s)
+            if (c == '.') c = dp;
     errno = 0;
-    const double d = strtod_l(text.c_str(), &end, cLocale());
-    if (errno == ERANGE || end != text.c_str() + text.size()) return false;
-    out = d;
+    char* end = nullptr;
+    const double v = std::strtod(s.c_str(), &end);
+    if (end != s.c_str() + s.size() || errno == ERANGE || !std::isfinite(v)) return false;
+    out = v;
     return true;
-#else
-    const auto res = std::from_chars(first, last, out);
-    return res.ec == std::errc() && res.ptr == last;
-#endif
-}
-
-// Shortest representation that parses back to exactly `d`.
-char* formatDouble(char* first, char* last, double d) {
-#if defined(__APPLE__)
-    const auto size = static_cast<size_t>(last - first);
-    for (int precision = 15; precision <= 17; ++precision) {
-        const int n = snprintf_l(first, size, cLocale(), "%.*g", precision, d);
-        if (n <= 0 || static_cast<size_t>(n) >= size) return first;
-        double back = 0.0;
-        if (precision == 17 || (parseDouble(first, first + n, back) && back == d)) return first + n;
-    }
-    return first;
-#else
-    return std::to_chars(first, last, d).ptr;   // shortest round-trip form
-#endif
 }
 }  // namespace
 
@@ -443,8 +416,11 @@ private:
             if (!isDigit()) return fail("expected a digit in the exponent");
             while (isDigit()) ++i_;
         }
+        // The token is already validated as a JSON number above. Parse it with the C library
+        // (floating-point std::from_chars needs a very recent macOS) on a NUL-terminated copy;
+        // the decimal point is always '.', so normalise for a locale that might use ','.
         double d = 0.0;
-        if (!parseDouble(s_.data() + start, s_.data() + i_, d)) {
+        if (!parseDouble(s_.substr(start, i_ - start), d)) {
             i_ = start;
             return fail("number out of range");
         }
@@ -505,13 +481,21 @@ void writeNumber(std::string& out, double d) {
         return;
     }
     char buf[40];
-    char* end = buf;
     if (d == std::floor(d) && std::fabs(d) < 9007199254740992.0) {
-        end = std::to_chars(buf, buf + sizeof(buf), static_cast<long long>(d)).ptr;
-    } else {
-        end = formatDouble(buf, buf + sizeof(buf), d);
+        const auto res = std::to_chars(buf, buf + sizeof(buf), static_cast<long long>(d));
+        out.append(buf, res.ptr);
+        return;
     }
-    out.append(buf, end);
+    // Shortest of %.15g / %.16g / %.17g that round-trips (floating-point std::to_chars needs
+    // macOS 13.3+). snprintf may use the locale's decimal separator, so force '.'.
+    for (int precision = 15; precision <= 17; ++precision) {
+        std::snprintf(buf, sizeof buf, "%.*g", precision, d);
+        for (char* p = buf; *p; ++p)
+            if (*p == ',') *p = '.';
+        double back = 0;
+        if (parseDouble(buf, back) && back == d) break;
+    }
+    out += buf;
 }
 
 void newline(std::string& out, int indent, int level) {

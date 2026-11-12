@@ -278,3 +278,44 @@ X(AboutLicence,
   L"со схожими эффектами, не использует их код и графику; все изображения создаются программно.",
   L"SnowFall is an independent implementation. It is not affiliated with other products that offer "
   L"similar effects and uses none of their code or artwork; all images are generated procedurally.")
+
+// ---- macOS variants (the macOS UI prefers <Id>Mac when it exists; Windows never uses them) ----
+X(MenuAutostartMac, L"Открывать при входе в систему", L"Open at login")
+X(ChkStartupMac, L"Открывать при входе в систему", L"Open at login")
+X(ChkOnTaskbarMac, L"На Dock", L"On the Dock")
+X(ChkSnowplowMac, L"Снегоуборочная машинка на Dock", L"Snowplow on the Dock")
+X(ChkSnowplowAllTaskbarsMac, L"На каждом экране с Dock", L"On every screen with a Dock")
+X(SnowplowAllTaskbarsHintMac, L"Dock снизу экрана — маршрут машинки", L"A Dock at the bottom of a screen is a snowplow route")
+X(ChkGarlandMac, L"Гирлянда на Dock", L"Garland on the Dock")
+X(ChkHoldKeyMac, L"Удерживать Ctrl+Option для временного режима", L"Hold Ctrl+Option for temporary interaction mode")
+X(HelpTextMac,
+  L"Чтобы трогать снег, удерживайте Ctrl+Option или включите режим горячей клавишей либо в меню значка "
+  L"в строке меню. Для этого macOS попросит разрешение «Универсальный доступ».\n"
+  L"• Левая кнопка по сугробу: варежка сметает снег, лопата расчищает полосу; правый щелчок — следующий инструмент.\n"
+  L"• Снежок: тяните от сугроба — ком растёт; положите шар на шар, и получится снеговик.\n"
+  L"• Снежки и снеговики живут позади окон: на основном мониторе или на всех (флажок выше).",
+  L"To touch the snow, hold Ctrl+Option or turn the mode on with its hotkey or from the menu-bar icon. "
+  L"macOS will ask for the Accessibility permission for this.\n"
+  L"• Left-drag over a drift: the mitten brushes snow away, the shovel clears a strip; right-click picks the next tool.\n"
+  L"• Snowball: drag from a drift and the ball grows; drop a ball onto another to build a snowman.\n"
+  L"• Snowballs and snowmen live behind windows: on the primary monitor or on all monitors (option above).")
+X(FestiveTextMac, L"Гирлянда мигает вдоль верхнего края Dock. Салют начнётся сам в полночь 31 декабря и продлится около полутора минут, а кнопка «Салют!» запускает его прямо сейчас.",
+  L"The garland twinkles along the top edge of the Dock. Fireworks start by themselves at midnight on December 31 and last about a minute and a half; the «Fireworks!» button launches them right now.")
+X(HotkeyHintMac, L"Щёлкните поле и нажмите сочетание с Ctrl, Option, Shift или Cmd. Backspace или Delete — отключить.",
+  L"Click a field and press a combination with Ctrl, Option, Shift or Cmd. Backspace or Delete disables it.")
+X(PickerHintMac, L"Программы с открытыми окнами. Выберите одну или несколько (Cmd, Shift) — их окна останутся без снега.",
+  L"Apps with open windows. Select one or more (Cmd, Shift); their windows will stay free of snow.")
+X(AboutDescriptionMac,
+  L"Интерактивный снег на рабочем столе macOS: снежинки падают поверх экрана, оседают на окнах и "
+  L"Dock, а из сугробов можно катать снежки и собирать снеговиков.",
+  L"Interactive snow for the macOS desktop: snowflakes fall over the screen, settle on windows and "
+  L"the Dock, and drifts can be rolled into snowballs and snowmen.")
+X(AccessibilityNeededTitle, L"Нужно разрешение «Универсальный доступ»", L"Accessibility permission needed")
+X(AccessibilityNeededText,
+  L"Чтобы снег можно было трогать мышью, SnowFall нужно разрешение «Универсальный доступ». Программа "
+  L"перехватывает щелчки только по снегу и только пока включён режим взаимодействия. Откройте «Системные "
+  L"настройки → Конфиденциальность и безопасность → Универсальный доступ» и включите SnowFall.",
+  L"To let you touch the snow with the mouse, SnowFall needs the Accessibility permission. It only "
+  L"intercepts clicks on the snow and only while interaction mode is on. Open System Settings → "
+  L"Privacy & Security → Accessibility and turn SnowFall on.")
+X(BtnOpenSystemSettings, L"Открыть Системные настройки", L"Open System Settings")
