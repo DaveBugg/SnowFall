@@ -5,7 +5,8 @@ name: macOS UI
 # (the universal Xcode build of the app runs in ci.yml).
 on:
   push:
-    branches: ["mac/**"]
+    branches: ["mac/**", main]
+    paths: ["platform/macos/**", "core/**", ".github/workflows/mac-ui.yml"]
   pull_request:
     paths: ["platform/macos/**", "core/i18n/**", ".github/workflows/mac-ui.yml"]
   workflow_dispatch:
