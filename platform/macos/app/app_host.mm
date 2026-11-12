@@ -253,7 +253,17 @@ void AppHost::applySettings(Settings next, bool fromUi) {
     if (running_) scheduleSave();
 }
 
-void AppHost::applySettingsJson(const std::string& json) {
+void AppHost::applySettingsJson(const std::string& text) {
+    // Accept Mac hotkey spellings ("Ctrl+Option+P") before the core's sanitize() would drop them.
+    std::string json = text;
+    json::Value root;
+    if (json::parse(text, root)) {
+        if (json::Value* h = root.find("hotkeys"); h && h->isObject()) {
+            for (const char* k : {"pauseToggle", "clearSnow", "interactionToggle"})
+                if (json::Value* v = h->find(k); v && v->isString()) *v = json::Value(canonicalHotkeyText(v->asString()));
+        }
+        json = json::write(root, 0);
+    }
     Settings s;
     std::string err;
     if (!fromJson(json, s, &err)) {

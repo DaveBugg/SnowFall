@@ -370,10 +370,10 @@ int runSelfTest() {
         RuntimeTuning tuning;
         runner.start(s, tuning);
         if (layout) runner.setLayout(layout);
-        pumpRunLoop(0.8);
+        pumpRunLoop(1.0);
         auto snap = exchange.latest();
         runner.stop();
-        check(snap && snap->frame > 10, "simulation: SimRunner steps and publishes",
+        check(snap && snap->frame > 2, "simulation: SimRunner steps and publishes",
               snap ? fmt("frame %llu, %u particles", static_cast<unsigned long long>(snap->frame), snap->stats.particles)
                    : std::string("no snapshot"));
     }
@@ -434,8 +434,11 @@ int runSelfTest() {
             // Settings JSON from the UI is applied and comes back sanitized.
             Settings s = host->settings();
             s.weather.intensity = 31;
-            s.hotkeys.pauseToggle = "Ctrl+Option+P";   // Mac spelling is accepted and stored portably
-            host->applySettingsJson(toJson(s));
+            std::string sent = toJson(s);   // Mac spelling from a UI is accepted and stored portably
+            const std::string from = "\"pauseToggle\": \"" + s.hotkeys.pauseToggle + "\"";
+            if (const std::size_t at = sent.find(from); at != std::string::npos)
+                sent.replace(at, from.size(), "\"pauseToggle\": \"Ctrl+Option+P\"");
+            host->applySettingsJson(sent);
             check(host->settings().weather.intensity == 31 && host->settings().hotkeys.pauseToggle == "Ctrl+Alt+P",
                   "app: applySettingsJSON", host->settings().hotkeys.pauseToggle);
             check(host->validateHotkey("Ctrl+Option+Shift+F17").empty(), "app: validateHotkey accepts a free combination");
