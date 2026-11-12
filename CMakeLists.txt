@@ -1,4 +1,17 @@
 cmake_minimum_required(VERSION 3.24)
+
+# macOS 13+. Must be set before project(). The Xcode generator builds the universal binary
+# (arm64 + x86_64, what CI ships); Ninja builds the host architecture only, because CMake
+# cannot build multi-architecture Swift (platform/macos/ui) with Ninja.
+if(CMAKE_HOST_APPLE OR EXISTS "/System/Library/CoreServices/SystemVersion.plist")
+  if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
+  endif()
+  if(NOT DEFINED CMAKE_OSX_ARCHITECTURES AND CMAKE_GENERATOR STREQUAL "Xcode")
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS target architectures")
+  endif()
+endif()
+
 project(SnowFall VERSION 0.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -39,6 +52,11 @@ endfunction()
 
 set(SNOW_CORE_DIR "${CMAKE_SOURCE_DIR}/core")
 enable_testing()
+
+# The macOS app brings its own logger backend (file + stderr) instead of core's stderr one.
+if(APPLE AND EXISTS "${CMAKE_SOURCE_DIR}/platform/macos/CMakeLists.txt")
+  set(SNOW_PLATFORM_DIAG ON)
+endif()
 
 # Portable core: simulation, surfaces, tools, settings model/JSON. Builds on any OS.
 add_subdirectory(core)

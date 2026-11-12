@@ -1,0 +1,9 @@
+module SFBridge {
+  header "@SF_BRIDGE_DIR@/SFBridge.h"
+  export *
+}
+
+module SFSelfTest {
+  header "@SF_UI_DIR@/selftest/SFSelfTest.h"
+  export *
+}

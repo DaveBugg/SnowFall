@@ -4,12 +4,13 @@
 #   snow_settings  settings model, JSON mapping, migrations, sanitize(), hotkey grammar
 #                  (SettingsStore file I/O is implemented by the platform layer)
 #   snow_diag      logger backend: portable stderr version here on non-Windows;
-#                  Windows provides its own (platform/windows/diagnostics)
+#                  Windows (platform/windows/diagnostics) and macOS (platform/macos/diagnostics,
+#                  SNOW_PLATFORM_DIAG) provide their own
 
 snow_module(snow_sim      "${CMAKE_CURRENT_SOURCE_DIR}" core simulation surfaces interaction runtime i18n)
 snow_module(snow_settings "${CMAKE_CURRENT_SOURCE_DIR}" settings)
 
-if(NOT WIN32)
+if(NOT WIN32 AND NOT SNOW_PLATFORM_DIAG)
   add_library(snow_diag STATIC diagnostics/log_portable.cpp diagnostics/log.h)
   target_include_directories(snow_diag PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
   find_package(Threads REQUIRED)

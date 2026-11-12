@@ -1,0 +1,65 @@
+name: macOS UI
+
+# SwiftUI module of the macOS port (platform/macos/ui): standalone build with warnings as errors,
+# the UI self-test with screenshots, and the app + UI built inside the root project with Ninja
+# (the universal Xcode build of the app runs in ci.yml).
+on:
+  push:
+    branches: ["mac/**"]
+  pull_request:
+    paths: ["platform/macos/**", "core/i18n/**", ".github/workflows/mac-ui.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    name: UI module + self-test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          cmake --version
+          command -v ninja || brew install ninja
+      - name: Configure
+        run: cmake -S platform/macos/ui -B build-ui -G Ninja -DCMAKE_BUILD_TYPE=Release -DSNOWFALL_UI_WERROR=ON
+      - name: Build (no warnings allowed)
+        run: |
+          set -o pipefail
+          cmake --build build-ui 2>&1 | tee build-ui.log
+          if grep -E "warning:" build-ui.log; then echo "::error::warnings in the UI build"; exit 1; fi
+      - name: Self-test (screenshots)
+        run: |
+          mkdir -p selftest-out
+          # perl alarm = portable timeout (no coreutils on the runner image)
+          perl -e 'alarm shift; exec @ARGV' 300 ./build-ui/snowfall_ui_demo --selftest "$PWD/selftest-out"
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: snowfall-ui-selftest
+          path: selftest-out/
+          if-no-files-found: warn
+
+  integration:
+    name: App + UI inside the root project (Ninja, arm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure + build (root, Ninja)
+        run: |
+          command -v ninja || brew install ninja
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSNOWFALL_UI_DEMO=ON
+          cmake --build build --parallel
+      - name: App self-test + UI demo smoke run
+        run: |
+          perl -e 'alarm shift; exec @ARGV' 300 build/SnowFall.app/Contents/MacOS/SnowFall --selftest
+          demo=$(find build -name snowfall_ui_demo -type f | head -1)
+          mkdir -p smoke-out
+          perl -e 'alarm shift; exec @ARGV' 300 "$demo" --selftest "$PWD/smoke-out"
+# The universal (arm64 + x86_64) build of app + UI is the Xcode-generator build in ci.yml.
