@@ -322,3 +322,5 @@ X(BtnOpenSystemSettings, L"Открыть Системные настройки"
 X(ChkHideCursorMac, L"Прятать системный курсор (экспериментально)", L"Hide the system cursor (experimental)")
 X(HideCursorHintMac, L"Инструмент заменяет курсор, как на Windows. Если не сработает — инструмент рисуется вокруг курсора.",
   L"The tool replaces the cursor, as on Windows. If it doesn't work, the tool is drawn around the cursor.")
+X(CursorReplaceUnavailableMac, L"Не удалось спрятать курсор на этой версии macOS — инструмент рисуется вокруг курсора",
+  L"The cursor could not be hidden on this macOS version — the tool is drawn around the cursor")

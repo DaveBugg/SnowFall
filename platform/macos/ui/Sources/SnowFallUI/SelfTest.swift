@@ -306,6 +306,19 @@ private final class SelfTestRunner {
         store.update { $0.interaction.snowmanSkin = "pirate" }
         check(str("interaction.snowmanSkin") == "pirate", "snowman skin picker")
 
+        // Hide the system cursor (macOS, experimental).
+        check((value("interaction.hideSystemCursor") as? NSNumber)?.boolValue == false, "hideSystemCursor defaults to false")
+        check(!store.strings["ChkHideCursorMac"].hasPrefix("ChkHide") && !store.strings["HideCursorHintMac"].hasPrefix("HideCursor")
+              && !store.strings["CursorReplaceUnavailableMac"].hasPrefix("Cursor"), "cursor strings come from the table")
+        store.update { $0.interaction.hideSystemCursor = true }
+        check((value("interaction.hideSystemCursor") as? NSNumber)?.boolValue == true, "hide-cursor toggle -> interaction.hideSystemCursor")
+        check(int("weather.futureKnob") == 7, "unknown keys still preserved after the cursor toggle")
+        store.refreshDiagnostics()
+        check(store.diagnostics.cursorMode == "replace-unavailable", "diagnostics cursorMode parsed")
+        store.update { $0.interaction.hideSystemCursor = false }
+        store.refreshDiagnostics()
+        check(store.diagnostics.cursorMode != "replace-unavailable", "cursorMode clears when the option is off")
+
         // Commands.
         store.actions?.clearSnow()
         store.resetPreview()
@@ -354,6 +367,26 @@ private final class SelfTestRunner {
                 render(sw.contentView, "settings-ru-\(theme.rawValue)-\(page.rawValue)-\(SelfTestRunner.pageName(page))")
             }
         }
+        // Tools page with the hide-cursor option on and the "unavailable" note, RU and EN, all themes;
+        // then with interaction off (the option is disabled).
+        store.update { $0.interaction.hideSystemCursor = true }
+        store.refreshDiagnostics()
+        store.page = .tools
+        for lang in [UILanguage.ru, .en] {
+            store.update { $0.system.language = lang }
+            for theme in UITheme.allCases {
+                store.update { $0.system.uiTheme = theme }
+                spin(0.35)
+                render(sw.contentView, "cursor-\(lang.rawValue)-\(theme.rawValue)-tools")
+            }
+        }
+        store.update { $0.system.uiTheme = .night }
+        store.update { $0.interaction.enabled = false }
+        spin(0.35)
+        render(sw.contentView, "cursor-en-night-tools-interaction-off")
+        store.update { $0.interaction.enabled = true }
+        store.update { $0.interaction.hideSystemCursor = false }
+        store.refreshDiagnostics()
         store.update { $0.system.language = .en }
         store.update { $0.system.uiTheme = .night }
         store.page = .snow

@@ -156,7 +156,9 @@ static const char kInitialSettingsText[] = R"JSON({
         @"snowmen": @1, @"monitors": @2, @"trackedWindows": @7, @"paused": @(self.paused), @"autoPaused": @NO,
         @"onBattery": @NO, @"statusText": strings[self.paused ? @"StatusPaused" : @"StatusRunning"] ?: @"",
         @"interactionKeys": @"Ctrl+Option", @"logPath": @"/Users/demo/Library/Logs/SnowFall/snowfall.log",
-        @"version": @"0.1.1"
+        @"version": @"0.1.1",
+        // Pretend hiding the cursor fails on this macOS, so the UI shows its note.
+        @"cursorMode": [[self current][@"interaction"][@"hideSystemCursor"] boolValue] ? @"replace-unavailable" : @"overlay"
     };
     NSData *data = [NSJSONSerialization dataWithJSONObject:d options:0 error:nil];
     return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
