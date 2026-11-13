@@ -84,6 +84,10 @@ struct InteractionSettings {
     // Falling snow flows around the mouse pointer like under an umbrella (also outside
     // interaction mode); a fast mouse flick stirs a small gust.
     bool umbrellaCursor = true;
+    // macOS only (experimental): hide the system cursor while interaction mode is on so the tool
+    // sprite replaces it, like on Windows (uses a private macOS call; falls back to drawing the tool
+    // around the visible cursor). Windows always replaces the cursor. json: interaction.hideSystemCursor
+    bool hideSystemCursor = false;
     bool operator==(const InteractionSettings&) const = default;
 };
 

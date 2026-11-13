@@ -118,7 +118,7 @@ TEST(settings_json_key_names) {
           "driftOpacityPercent,shakeToClear,naturalCaps,fallingSnowmen,snowmenIntervalMinutes,"
           "snowmenNeedHeavySnow,snowmenMaxAlive,snowplow,snowplowDelayMinutes,snowplowAllTaskbars,icicles");
     CHECK(keys("interaction") == "enabled,holdKeyEnabled,tool,snowmanSkin,brushRadiusPxAt96Dpi,shovelWidthPxAt96Dpi,"
-                                     "blockClicksWhileHeld,objectsOnAllMonitors,umbrellaCursor");
+                                     "blockClicksWhileHeld,objectsOnAllMonitors,umbrellaCursor,hideSystemCursor");
     CHECK(keys("performance") == "profile,fpsCap,pauseOnFullscreen,reduceOnBattery,animations");
     CHECK(keys("hotkeys") == "pauseToggle,clearSnow,interactionToggle");
     CHECK(keys("system") == "language,uiTheme,trayLeftClickTogglesPause,excludedProcesses,excludedSnowMode");

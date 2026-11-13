@@ -193,6 +193,7 @@ json::Value toTree(const Settings& s) {
     i.set("blockClicksWhileHeld", s.interaction.blockClicksWhileHeld);
     i.set("objectsOnAllMonitors", s.interaction.objectsOnAllMonitors);
     i.set("umbrellaCursor", s.interaction.umbrellaCursor);
+    i.set("hideSystemCursor", s.interaction.hideSystemCursor);
 
     Value& p = root.set("performance", Value::object());
     p.set("profile", enumToString(kProfileNames, s.performance.profile));
@@ -268,6 +269,7 @@ void fromTree(const json::Value& root, Settings& s) {
         readBool(*i, "blockClicksWhileHeld", s.interaction.blockClicksWhileHeld);
         readBool(*i, "objectsOnAllMonitors", s.interaction.objectsOnAllMonitors);
         readBool(*i, "umbrellaCursor", s.interaction.umbrellaCursor);
+        readBool(*i, "hideSystemCursor", s.interaction.hideSystemCursor);
     }
     if (const json::Value* p = section(root, "performance")) {
         readEnum(*p, "profile", kProfileNames, s.performance.profile);

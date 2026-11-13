@@ -319,3 +319,6 @@ X(AccessibilityNeededText,
   L"intercepts clicks on the snow and only while interaction mode is on. Open System Settings → "
   L"Privacy & Security → Accessibility and turn SnowFall on.")
 X(BtnOpenSystemSettings, L"Открыть Системные настройки", L"Open System Settings")
+X(ChkHideCursorMac, L"Прятать системный курсор (экспериментально)", L"Hide the system cursor (experimental)")
+X(HideCursorHintMac, L"Инструмент заменяет курсор, как на Windows. Если не сработает — инструмент рисуется вокруг курсора.",
+  L"The tool replaces the cursor, as on Windows. If it doesn't work, the tool is drawn around the cursor.")
