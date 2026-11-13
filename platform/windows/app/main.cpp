@@ -7,7 +7,9 @@
 #include <cwchar>
 #include <shellapi.h>
 
+#include <algorithm>
 #include <string>
+#include <vector>
 
 #include "app/app_host.h"
 #include "app/cursor_hider.h"
@@ -37,6 +39,20 @@ LONG WINAPI crashFilter(EXCEPTION_POINTERS* info) {
         }
     }
     return EXCEPTION_CONTINUE_SEARCH;
+}
+// Keep only the newest few crash dumps (names sort by time): the folder never piles up.
+void pruneCrashDumps(const std::wstring& dir, size_t keep) {
+    std::vector<std::wstring> names;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\crash-*.dmp").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) names.emplace_back(fd.cFileName);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    if (names.size() <= keep) return;
+    std::sort(names.begin(), names.end());
+    for (size_t i = 0; i + keep < names.size(); ++i) DeleteFileW((dir + L"\\" + names[i]).c_str());
 }
 }  // namespace
 
@@ -87,6 +103,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
     snow::log::init(snow::SettingsStore::dataDirectory() + L"\\snowfall.log");
     wcsncpy_s(g_dumpDir, snow::SettingsStore::dataDirectory().c_str(), _TRUNCATE);
+    pruneCrashDumps(snow::SettingsStore::dataDirectory(), 5);
 
     int rc = 1;
     {

@@ -4,6 +4,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <atomic>
 #include <mutex>
 
 namespace snow::log {
@@ -11,9 +12,9 @@ namespace {
 std::mutex g_mutex;
 FILE* g_file = nullptr;
 std::wstring g_path;
-Level g_min = Level::Info;
+std::atomic<Level> g_min{Level::Info};   // read without the lock in write()
 long g_written = 0;
-constexpr long kMaxBytes = 1024 * 1024;
+long g_maxBytes = kCompactLogBytes;
 
 void openLocked() {
     g_file = _wfsopen(g_path.c_str(), L"ab", _SH_DENYNO);
@@ -40,7 +41,14 @@ void init(const std::wstring& filePath, Level minLevel) {
     g_path = filePath;
     g_min = minLevel;
     openLocked();
-    if (g_file && g_written > kMaxBytes) rotateLocked();
+    if (g_file && g_written > g_maxBytes) rotateLocked();
+}
+
+void configure(Level minLevel, long maxBytes) {
+    std::lock_guard<std::mutex> lk(g_mutex);
+    g_min = minLevel;
+    g_maxBytes = maxBytes > 16 * 1024 ? maxBytes : 16 * 1024;
+    if (g_file && g_written > g_maxBytes) rotateLocked();
 }
 
 void shutdown() {
@@ -73,7 +81,7 @@ void write(Level level, const char* fmt, ...) {
     fwrite(line, 1, static_cast<size_t>(n), g_file);
     fflush(g_file);
     g_written += n;
-    if (g_written > kMaxBytes) rotateLocked();
+    if (g_written > g_maxBytes) rotateLocked();
 }
 
 }  // namespace snow::log

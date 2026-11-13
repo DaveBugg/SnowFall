@@ -97,6 +97,9 @@ struct PerformanceSettings {
     bool pauseOnFullscreen = true;
     bool reduceOnBattery = true;
     bool animations = true;              // false: no falling particles / dust, static drifts only
+    // Detailed log for troubleshooting: debug records and a bigger file (2 MB instead of 256 KB,
+    // plus one previous file either way). json: performance.detailedLog
+    bool detailedLog = false;
     bool operator==(const PerformanceSettings&) const = default;
 };
 

@@ -4,6 +4,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 #import <Carbon/Carbon.h>
 #import <ServiceManagement/ServiceManagement.h>
+#include <dirent.h>
 #include <execinfo.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -12,7 +13,10 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <algorithm>
 #include <map>
+#include <string>
+#include <vector>
 
 #include "diagnostics/log.h"
 #include "system/cursor_hider.h"
@@ -212,6 +216,17 @@ void exceptionHandler(NSException* e) {
 }  // namespace
 
 void installCrashHandler(const std::string& dir) {
+    // Keep only the 5 newest reports (names sort by time): the folder never piles up.
+    if (DIR* d = ::opendir(dir.c_str())) {
+        std::vector<std::string> names;
+        while (dirent* e = ::readdir(d)) {
+            const std::string n = e->d_name;
+            if (n.rfind("crash-", 0) == 0 && n.size() > 4 && n.compare(n.size() - 4, 4, ".txt") == 0) names.push_back(n);
+        }
+        ::closedir(d);
+        std::sort(names.begin(), names.end());
+        for (size_t i = 0; i + 5 < names.size(); ++i) ::unlink((dir + "/" + names[i]).c_str());
+    }
     const std::time_t now = std::time(nullptr);
     std::tm tm{};
     localtime_r(&now, &tm);

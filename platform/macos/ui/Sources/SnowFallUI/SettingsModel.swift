@@ -68,6 +68,7 @@ struct PerformanceSettings: Codable, Equatable {
     var pauseOnFullscreen = true
     var reduceOnBattery = true
     var animations = true
+    var detailedLog = false          // debug records + 2 MB log instead of 256 KB
 }
 
 struct HotkeySettings: Codable, Equatable {
@@ -195,6 +196,7 @@ extension PerformanceSettings {
         pauseOnFullscreen = c.value(.pauseOnFullscreen, pauseOnFullscreen)
         reduceOnBattery = c.value(.reduceOnBattery, reduceOnBattery)
         animations = c.value(.animations, animations)
+        detailedLog = c.value(.detailedLog, detailedLog)
     }
 }
 

@@ -306,6 +306,13 @@ private final class SelfTestRunner {
         store.update { $0.interaction.snowmanSkin = "pirate" }
         check(str("interaction.snowmanSkin") == "pirate", "snowman skin picker")
 
+        // Detailed log toggle.
+        check((value("performance.detailedLog") as? NSNumber)?.boolValue == false, "detailedLog defaults to false")
+        check(!store.strings["ChkDetailedLog"].hasPrefix("ChkDetailed"), "detailed-log string comes from the table")
+        store.update { $0.performance.detailedLog = true }
+        check((value("performance.detailedLog") as? NSNumber)?.boolValue == true, "detailed-log toggle -> performance.detailedLog")
+        store.update { $0.performance.detailedLog = false }
+
         // Hide the system cursor (macOS, experimental).
         check((value("interaction.hideSystemCursor") as? NSNumber)?.boolValue == false, "hideSystemCursor defaults to false")
         check(!store.strings["ChkHideCursorMac"].hasPrefix("ChkHide") && !store.strings["HideCursorHintMac"].hasPrefix("HideCursor")

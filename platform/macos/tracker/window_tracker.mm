@@ -204,7 +204,10 @@ struct WindowTracker::Impl {
                               si.visible.l, si.visible.t, si.visible.width(), si.visible.height(),
                               si.primary ? " primary" : "");
             }
-            if (ax != dockAX || std::abs(w - dockWidth) > 8)
+            // Only worth a line when some screen has a bottom Dock (hidden / side Dock: no surface).
+            bool bottomDock = false;
+            for (const ScreenInfo& si : s) bottomDock = bottomDock || dockEdge(si) == DockEdge::Bottom;
+            if (bottomDock && (ax != dockAX || std::abs(w - dockWidth) > 8))
                 SNOW_LOGI("tracker: Dock width %d pt (%s)", w, ax ? "accessibility" : "estimate");
             screens = std::move(s);
             dockWidth = w;

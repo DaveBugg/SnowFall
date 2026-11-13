@@ -373,6 +373,7 @@ struct PerformancePage: View {
                 SnowToggle(title: t["ChkPauseFullscreen"], isOn: store.binding(\.performance.pauseOnFullscreen))
                 SnowToggle(title: t["ChkReduceBattery"], isOn: store.binding(\.performance.reduceOnBattery))
                 SnowToggle(title: t["ChkAnimations"], isOn: store.binding(\.performance.animations))
+                SnowToggle(title: t["ChkDetailedLog"], isOn: store.binding(\.performance.detailedLog))
             }
             .padding(.top, 4)
             SectionHeading(text: t["GroupDiagnostics"]).padding(.top, 6)

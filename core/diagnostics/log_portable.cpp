@@ -3,6 +3,7 @@
 #ifndef _WIN32
 #include <cstdarg>
 #include <cstdio>
+#include <atomic>
 #include <mutex>
 
 #include "diagnostics/log.h"
@@ -10,10 +11,11 @@
 namespace snow::log {
 namespace {
 std::mutex g_mutex;
-Level g_min = Level::Info;
+std::atomic<Level> g_min{Level::Info};   // read without the lock in write()
 }  // namespace
 
 void init(const std::wstring&, Level minLevel) { g_min = minLevel; }
+void configure(Level minLevel, long) { g_min = minLevel; }
 void shutdown() {}
 
 void write(Level level, const char* fmt, ...) {

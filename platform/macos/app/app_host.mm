@@ -317,6 +317,12 @@ void AppHost::applySettings(Settings next, bool fromUi) {
         tracker_.requestResync();
     }
     if (running_ && !(next.hotkeys == prev.hotkeys)) registerHotkeys();
+    if (next.performance.detailedLog != prev.performance.detailedLog || !running_) {
+        const bool detailed = next.performance.detailedLog;
+        log::configure(detailed ? log::Level::Debug : log::Level::Info,
+                       detailed ? log::kDetailedLogBytes : log::kCompactLogBytes);
+        if (running_) SNOW_LOGI("log: %s", detailed ? "detailed" : "compact");
+    }
     if (next.interaction.hideSystemCursor && !prev.interaction.hideSystemCursor) cursorReplaceFailed_ = false;
 
     interaction_.setFeatureEnabled(settings_.interaction.enabled);

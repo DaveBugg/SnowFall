@@ -209,7 +209,7 @@ void InteractionController::setSuspended(bool suspended) {
 void InteractionController::setToggled(bool on) {
     toggled_ = on && feature_;
     evaluate();
-    if (toggled_ && active_ && !impl_->tap && !askedForPermission_) {
+    if (toggled_ && active_ && !impl_->tap && !askedForPermission_ && NSApp.modalWindow == nil) {
         askedForPermission_ = true;
         if (onNeedsAccessibility) onNeedsAccessibility();
     }
@@ -232,10 +232,17 @@ void InteractionController::poll() {
             held_ = true;
             evaluate();
         }
-        if (held_ && active_ && !impl_->tap && !askedForPermission_ && now - chordSince_ >= kDeliberateHold) {
+        // Not while another dialog (the first-run welcome) is open: it would end up behind it.
+        // The next poll after the dialog closes asks if the chord is still held.
+        if (held_ && active_ && !impl_->tap && !askedForPermission_ && NSApp.modalWindow == nil &&
+            now - chordSince_ >= kDeliberateHold) {
             askedForPermission_ = true;
             if (onNeedsAccessibility) onNeedsAccessibility();
         }
+    }
+    if (toggled_ && active_ && !impl_->tap && !askedForPermission_ && NSApp.modalWindow == nil) {
+        askedForPermission_ = true;   // toggled on while a dialog was open: ask now
+        if (onNeedsAccessibility) onNeedsAccessibility();
     }
     if (active_ && !impl_->tap) {
         // View-only mode: follow the pointer by polling; pick up a permission granted meanwhile.

@@ -201,6 +201,7 @@ json::Value toTree(const Settings& s) {
     p.set("pauseOnFullscreen", s.performance.pauseOnFullscreen);
     p.set("reduceOnBattery", s.performance.reduceOnBattery);
     p.set("animations", s.performance.animations);
+    p.set("detailedLog", s.performance.detailedLog);
 
     Value& h = root.set("hotkeys", Value::object());
     h.set("pauseToggle", s.hotkeys.pauseToggle);
@@ -277,6 +278,7 @@ void fromTree(const json::Value& root, Settings& s) {
         readBool(*p, "pauseOnFullscreen", s.performance.pauseOnFullscreen);
         readBool(*p, "reduceOnBattery", s.performance.reduceOnBattery);
         readBool(*p, "animations", s.performance.animations);
+        readBool(*p, "detailedLog", s.performance.detailedLog);
     }
     if (const json::Value* h = section(root, "hotkeys")) {
         readString(*h, "pauseToggle", s.hotkeys.pauseToggle);

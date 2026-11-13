@@ -28,7 +28,25 @@ if(MSVC)
 else()
   add_compile_options(-Wall -Wextra)
 endif()
-add_compile_definitions(SNOW_VERSION="${PROJECT_VERSION}")
+# Version string shown in the app and the log: "0.1.1" for a build of the release tag
+# (v0.1.1 at HEAD, or a tag build in CI), otherwise "0.1.1+<commit>" so a test build is never
+# mistaken for the release. File names and bundle/installer version numbers stay numeric.
+set(SNOW_VERSION_STRING "${PROJECT_VERSION}")
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git" AND NOT "$ENV{GITHUB_REF_TYPE}" STREQUAL "tag")
+  execute_process(COMMAND "${GIT_EXECUTABLE}" tag --points-at HEAD
+                  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE _snow_tags
+                  RESULT_VARIABLE _snow_r1 ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short=7 HEAD
+                  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE _snow_hash
+                  RESULT_VARIABLE _snow_r2 ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+  string(REPLACE "\n" ";" _snow_tags "${_snow_tags}")
+  if(_snow_r2 EQUAL 0 AND _snow_hash AND NOT "v${PROJECT_VERSION}" IN_LIST _snow_tags)
+    set(SNOW_VERSION_STRING "${PROJECT_VERSION}+${_snow_hash}")
+  endif()
+endif()
+message(STATUS "SnowFall version string: ${SNOW_VERSION_STRING}")
+add_compile_definitions(SNOW_VERSION="${SNOW_VERSION_STRING}")
 
 # Helper: one static library per module, sources picked up by glob.
 #   snow_module(<name> <root> <dir>...)  — dirs are relative to <root>; <root> is the include root.

@@ -363,6 +363,12 @@ void AppHost::applySettings(Settings next, bool fromSettingsWindow) {
         tracker_.requestResync();
     }
     if (!(next.hotkeys == prev.hotkeys) && running_) registerHotkeys(true);
+    if (next.performance.detailedLog != prev.performance.detailedLog || !running_) {
+        const bool detailed = next.performance.detailedLog;
+        log::configure(detailed ? log::Level::Debug : log::Level::Info,
+                       detailed ? log::kDetailedLogBytes : log::kCompactLogBytes);
+        if (running_) SNOW_LOGI("log: %s", detailed ? "detailed" : "compact");
+    }
 
     interaction_.setFeatureEnabled(next.interaction.enabled);
     interaction_.setHoldKeyEnabled(next.interaction.holdKeyEnabled);

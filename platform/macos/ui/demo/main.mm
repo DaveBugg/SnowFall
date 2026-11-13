@@ -32,7 +32,7 @@ static const char kInitialSettingsText[] = R"JSON({
   "interaction": {"enabled": true, "holdKeyEnabled": true, "tool": "snowball", "snowmanSkin": "random",
                   "brushRadiusPxAt96Dpi": 28, "shovelWidthPxAt96Dpi": 96, "blockClicksWhileHeld": true,
                   "objectsOnAllMonitors": false, "umbrellaCursor": true},
-  "performance": {"profile": "balanced", "fpsCap": 60, "pauseOnFullscreen": true, "reduceOnBattery": true, "animations": true},
+  "performance": {"profile": "balanced", "fpsCap": 60, "pauseOnFullscreen": true, "reduceOnBattery": true, "animations": true, "detailedLog": false},
   "hotkeys": {"pauseToggle": "Ctrl+Alt+S", "clearSnow": "Ctrl+Alt+X", "interactionToggle": "Ctrl+Shift+Win+I"},
   "system": {"language": "en", "uiTheme": "night", "trayLeftClickTogglesPause": false,
              "excludedProcesses": ["Telegram", "Keynote"], "excludedSnowMode": "behind"},

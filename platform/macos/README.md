@@ -11,7 +11,7 @@ macos-latest; awaiting the first manual test on the M2 (checklist at the end).
 | Languages | Objective-C++ for the platform layer (talks to the C++ core directly); **SwiftUI** for the settings window and the menu-bar quick panel, bridged through a small Objective-C++ façade. |
 | Rendering | Metal (`CAMetalLayer`), shaders ported from the HLSL sprite/drift SDF shaders. |
 | Build | CMake (Xcode or Ninja generator), `.app` bundle with `LSUIElement` (no Dock icon). |
-| Signing | No Apple Developer account for now: ad-hoc signed, not notarized. First launch: right-click → Open (documented in the README / release notes). |
+| Signing | No Apple Developer account for now: ad-hoc signed, not notarized. First launch: macOS 15+ — "Done" in the blocked dialog, then System Settings → Privacy & Security → Open Anyway; macOS 13–14 — right-click → Open (or `xattr -dr com.apple.quarantine /Applications/SnowFall.app`). |
 | Distribution | `.dmg` built in CI and attached to GitHub releases. |
 
 ## Architecture mapping
@@ -73,8 +73,8 @@ Command line: `SnowFall [--data-dir <dir>] [--settings] [--exit] [--selftest]`. 
 launch (or a double-click while running) opens the settings of the running instance.
 
 Files: settings `~/Library/Application Support/SnowFall/settings.json` (atomic write,
-`.corrupt` kept), log `~/Library/Logs/SnowFall/snowfall.log` (1 MB rotation), crash reports
-`crash-*.txt` next to the log. With `--data-dir` everything lives in that directory.
+`.corrupt` kept), log `~/Library/Logs/SnowFall/snowfall.log` (256 KB + one previous file; 2 MB with «Detailed log»), crash reports
+`crash-*.txt` next to the log (the 5 newest are kept). With `--data-dir` everything lives in that directory.
 
 ### Shell layout (`platform/macos`)
 

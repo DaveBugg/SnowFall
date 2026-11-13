@@ -108,6 +108,7 @@ const BoolField kBoolFields[] = {
     {IDC_PAUSE_FULLSCREEN, [](Settings& s) -> bool& { return s.performance.pauseOnFullscreen; }},
     {IDC_REDUCE_BATTERY, [](Settings& s) -> bool& { return s.performance.reduceOnBattery; }},
     {IDC_ANIMATIONS, [](Settings& s) -> bool& { return s.performance.animations; }},
+    {IDC_DETAILED_LOG, [](Settings& s) -> bool& { return s.performance.detailedLog; }},
     {IDC_GARLAND, [](Settings& s) -> bool& { return s.festive.garland; }},
     {IDC_FIREWORKS, [](Settings& s) -> bool& { return s.festive.fireworks; }},
     {IDC_STARTUP, [](Settings& s) -> bool& { return s.startupWithWindows; }},
@@ -541,7 +542,8 @@ struct SettingsWindow::Impl {
         toggle(p, IDC_PAUSE_FULLSCREEN, StrId::ChkPauseFullscreen, 16, 152, 528);
         toggle(p, IDC_REDUCE_BATTERY, StrId::ChkReduceBattery, 16, 178, 528);
         toggle(p, IDC_ANIMATIONS, StrId::ChkAnimations, 16, 204, 528);
-        heading(p, StrId::GroupDiagnostics, 16, 244, 528);
+        toggle(p, IDC_DETAILED_LOG, StrId::ChkDetailedLog, 16, 230, 528);
+        heading(p, StrId::GroupDiagnostics, 16, 270, 528);
         struct Row {
             StrId text;
             int id;
@@ -553,7 +555,7 @@ struct SettingsWindow::Impl {
                              {StrId::DiagWindows, IDC_DIAG_WINDOWS},
                              {StrId::DiagResets, IDC_DIAG_RESETS},
                              {StrId::DiagPower, IDC_DIAG_POWER}};
-        const int rowH = 22, top = 272;
+        const int rowH = 22, top = 298;
         for (int i = 0; i < static_cast<int>(ARRAYSIZE(left)); ++i) {
             label(p, left[i].text, 16, top + i * rowH, 152, rowH, -1, TextRole::Secondary);
             value(p, left[i].id, 170, top + i * rowH, 104, rowH);

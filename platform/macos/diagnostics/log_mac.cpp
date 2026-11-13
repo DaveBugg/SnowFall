@@ -2,7 +2,7 @@
 // not built when the platform provides its own, see SNOW_PLATFORM_DIAG in the root CMake).
 //
 // File: ~/Library/Logs/SnowFall/snowfall.log (chosen by the app via init()), appended,
-// rotated to snowfall.log.1 above 1 MB. Lines are also mirrored to stderr when
+// rotated to snowfall.log.1 above the size limit (256 KB, 2 MB with the detailed log). Lines are also mirrored to stderr when
 // SNOW_LOG_STDERR=1 is set or before init() (unit tests, --selftest output in CI).
 // Pure POSIX C++: also linked by the core unit tests on macOS.
 #include <fcntl.h>
@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <atomic>
 #include <mutex>
 #include <string>
 
@@ -28,10 +29,10 @@ namespace {
 std::mutex g_mutex;
 FILE* g_file = nullptr;
 std::string g_path;
-Level g_min = Level::Info;
+std::atomic<Level> g_min{Level::Info};   // read without the lock in write()
 long g_written = 0;
 bool g_stderr = true;   // until init() opened a file
-constexpr long kMaxBytes = 1024 * 1024;
+long g_maxBytes = kCompactLogBytes;
 
 std::string utf8(const std::wstring& w) {
     std::string out;
@@ -92,9 +93,16 @@ void init(const std::wstring& filePath, Level minLevel) {
         const std::size_t slash = g_path.find_last_of('/');
         if (slash != std::string::npos && slash > 0) ::mkdir(g_path.substr(0, slash).c_str(), 0755);
         openLocked();
-        if (g_file && g_written > kMaxBytes) rotateLocked();
+        if (g_file && g_written > g_maxBytes) rotateLocked();
     }
     g_stderr = !g_file || envStderr();
+}
+
+void configure(Level minLevel, long maxBytes) {
+    std::lock_guard<std::mutex> lk(g_mutex);
+    g_min = minLevel;
+    g_maxBytes = maxBytes > 16 * 1024 ? maxBytes : 16 * 1024;
+    if (g_file && g_written > g_maxBytes) rotateLocked();
 }
 
 void shutdown() {
@@ -134,7 +142,7 @@ void write(Level level, const char* fmt, ...) {
     std::fwrite(line, 1, static_cast<std::size_t>(n), g_file);
     std::fflush(g_file);
     g_written += n;
-    if (g_written > kMaxBytes) rotateLocked();
+    if (g_written > g_maxBytes) rotateLocked();
 }
 
 }  // namespace snow::log
