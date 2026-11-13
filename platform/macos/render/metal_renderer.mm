@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "diagnostics/log.h"
+#include "render/cursor_layout.h"
 #include "render/msl_translate.h"
 // Portable tessellation shared with the Windows renderer (no D3D dependencies).
 #include "../../windows/rendering/d3d11/drift_mesh.h"
@@ -57,7 +58,6 @@ void logLong(const char* prefix, NSString* text) {
     }
 }
 
-bool cursorBadged(Shape s) { return s == Shape::Mitten || s == Shape::Shovel || s == Shape::SnowChunk; }
 
 }  // namespace
 
@@ -72,7 +72,7 @@ struct MetalRenderer::Impl {
     std::uint64_t driftGen = 0;
     std::shared_ptr<const FrameSnapshot> lastSnap;
     std::vector<SpriteInstance> cursorScratch;
-    float badgeDx = 0, badgeDy = 0;
+    CursorDraw cursorDraw = CursorDraw::Replace;
     bool ready = false;
 
     bool ensure(id<MTLBuffer> __strong& buf, std::size_t& cap, std::size_t need, std::size_t initial) {
@@ -151,7 +151,9 @@ struct MetalRenderer::Impl {
             slot.driftGen = driftGen;
         }
 
-        std::size_t total = s.particles.sprites.size() + s.cursor.sprites.size();
+        // Tool cursor: as laid out by the core (Replace), or around the visible arrow (Hold).
+        cursorScratch = cursorDraw == CursorDraw::Hold ? layoutCursorHold(s.cursor.sprites, 1.0f) : s.cursor.sprites;
+        std::size_t total = s.particles.sprites.size() + cursorScratch.size();
         for (const SpriteBatch& b : s.objects) total += b.sprites.size();
         slot.objects.assign(s.objects.size(), Range{});
         slot.objectBounds.assign(s.objects.size(), RectI{});
@@ -188,22 +190,7 @@ struct MetalRenderer::Impl {
         };
         for (std::size_t i = 0; i < s.objects.size(); ++i) slot.objects[i] = put(s.objects[i].sprites);
         slot.particles = put(s.particles.sprites);
-        if ((badgeDx != 0 || badgeDy != 0) && !s.cursor.sprites.empty()) {
-            // The held-ball marker (ring + ball centred on the pointer) stays where it is; the
-            // tool sprites move next to the visible system arrow.
-            const bool hasRing = std::any_of(s.cursor.sprites.begin(), s.cursor.sprites.end(),
-                                             [](const SpriteInstance& sp) { return sp.shape == Shape::Ring; });
-            cursorScratch = s.cursor.sprites;
-            for (SpriteInstance& sp : cursorScratch) {
-                if (cursorBadged(sp.shape) || (sp.shape == Shape::Snowball && !hasRing)) {
-                    sp.x += badgeDx;
-                    sp.y += badgeDy;
-                }
-            }
-            slot.cursor = put(cursorScratch);
-        } else {
-            slot.cursor = put(s.cursor.sprites);
-        }
+        slot.cursor = put(cursorScratch);
     }
 };
 
@@ -296,9 +283,10 @@ void MetalRenderer::reset() {
     ++d.driftGen;
 }
 
-void MetalRenderer::setCursorBadgeOffset(float dx, float dy) {
-    d_->badgeDx = dx;
-    d_->badgeDy = dy;
+void MetalRenderer::setCursorDraw(CursorDraw mode) {
+    if (d_->cursorDraw == mode) return;
+    d_->cursorDraw = mode;
+    d_->lastSnap.reset();   // re-upload the cursor batch with the new layout
 }
 
 void MetalRenderer::encode(id<MTLRenderCommandEncoder> enc, const RenderTarget& t, float dt, float opacity) {

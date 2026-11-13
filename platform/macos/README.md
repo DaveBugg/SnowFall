@@ -124,11 +124,19 @@ reaches `-applySettingsJSON:` and renders every page in every theme to PNG; CI
 
 ## Known limitations on macOS
 
-- The system cursor stays visible in interaction mode (the tool is drawn 14x18 pt to the lower
-  right of the arrow; the brush ring stays centred on the pointer).
 - Clicking the snow needs the Accessibility permission (event tap). Without it interaction mode
   is "view only": the tool follows the pointer, clicks reach the apps.
 - Without the Accessibility permission the Dock width is estimated from its preferences.
 - Window tracking is polled, so a drift may trail a fast-dragged window by a frame or two.
 - Without notarization, Gatekeeper asks for confirmation on the first launch.
 - Snow is not drawn over the menu bar, Notification Center, Mission Control or the lock screen.
+- Tool cursor: by default the system arrow stays visible and the tool is drawn around it
+  ("the tool holds the cursor": mitten holding the arrow tip, shovel blade on the tip, snowball
+  on the tip, reach ring centred on the tip). `interaction.hideSystemCursor` (experimental)
+  hides the arrow like on Windows with the private CoreGraphics property
+  "SetsCursorInBackground" (resolved with dlsym; if it is missing or has no effect the app falls
+  back to the default for the session and diagnostics report `cursorMode: replace-unavailable`).
+  The hide applies to all displays at once; the arrow is shown again over the menu bar and the
+  Dock (they cover the snow), on leaving the mode, on sleep / lock / user switch, on quit,
+  crash, SIGTERM/SIGINT, and by a 1 s watchdog. Menus of other apps also cover the tool, so
+  while they are open in Replace mode the pointer can be hard to see.

@@ -50,6 +50,7 @@ add_library(snow_mac_core STATIC
   system/text_util.cpp system/text_util.h
   system/settings_store_mac.cpp
   render/msl_translate.cpp render/msl_translate.h
+  render/cursor_layout.cpp render/cursor_layout.h
   app/icon_render.cpp app/icon_render.h
   "${SNOW_DRIFT_MESH_SRC}")
 target_include_directories(snow_mac_core PUBLIC "${SNOW_MAC_DIR}" "${SNOW_CORE_DIR}" PRIVATE "${SNOW_SHIM_DIR}")

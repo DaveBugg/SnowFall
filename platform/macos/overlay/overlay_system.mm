@@ -80,7 +80,7 @@ struct OverlaySystem::Impl {
     std::atomic<bool> failed{false};
     std::atomic<int> fpsCap{60};
     std::atomic<float> opacity{1.0f};
-    std::atomic<bool> badge{false};
+    std::atomic<int> cursorDraw{static_cast<int>(CursorDraw::Replace)};
     std::atomic<float> statFps{0}, statFrameMs{0};
     std::atomic<std::uint64_t> statFrames{0};
     std::atomic<int> statGpuErrors{0};
@@ -278,7 +278,7 @@ struct OverlaySystem::Impl {
 
             const Clock::time_point t0 = Clock::now();
             @autoreleasepool {
-                renderer.setCursorBadgeOffset(badge.load() ? 14.0f : 0.0f, badge.load() ? 18.0f : 0.0f);
+                renderer.setCursorDraw(static_cast<CursorDraw>(cursorDraw.load()));
                 renderer.beginFrame();
                 renderer.prepare(snap);
                 lastSnap = snap;
@@ -452,8 +452,8 @@ void OverlaySystem::setGlobalOpacity(float o) {
     impl_->wake();
 }
 
-void OverlaySystem::setCursorBadge(bool on) {
-    impl_->badge.store(on);
+void OverlaySystem::setCursorDraw(CursorDraw mode) {
+    impl_->cursorDraw.store(static_cast<int>(mode));
     impl_->wake();
 }
 

@@ -63,6 +63,7 @@ public:
     bool settingsWindowOpen() const { return settingsWindow_ && settingsWindow_.isOpen; }
     bool hasQuickPanel() const { return quickPanel_ != nil; }
     void closeUi();
+    std::string cursorModeName() const;   // "hold" | "replace" | "replace-unavailable"
 
 private:
     void onLayout(std::shared_ptr<const DesktopLayout> layout);
@@ -82,6 +83,9 @@ private:
     std::string statusText() const;
     std::string holdKeysText() const;
     void setupUi();
+    void updateCursorMode();
+    void cursorTick();
+    bool pointerOverSystemChrome() const;
 
     std::string logPath_;
     std::string dataDir_;
@@ -112,6 +116,9 @@ private:
     id<SFSettingsWindow> settingsWindow_ = nil;
     id<SFQuickPanel> quickPanel_ = nil;
     NSTimer* saveTimer_ = nil;
+    NSTimer* cursorTimer_ = nil;
+    bool cursorReplaceFailed_ = false;
+    double lastInteractionActive_ = 0;
 };
 
 }  // namespace snow::mac

@@ -16,6 +16,7 @@
 #include <string>
 
 #include "core/snapshot.h"
+#include "render/cursor_layout.h"
 
 namespace snow::mac {
 
@@ -46,9 +47,9 @@ public:
     void encode(id<MTLRenderCommandEncoder> enc, const RenderTarget& target, float dt, float opacity);
     void endFrame(id<MTLCommandBuffer> cb);
 
-    // macOS cannot hide the system cursor of a background app: the tool sprite is drawn
-    // this many points to the lower right of the pointer (the brush ring stays centred).
-    void setCursorBadgeOffset(float dx, float dy);
+    // Tool cursor layout (render/cursor_layout.h): Replace = the core's layout (system cursor
+    // hidden), Hold = drawn around the visible system arrow.
+    void setCursorDraw(CursorDraw mode);
 
     // Forget uploaded geometry (e.g. after the preview world was reset).
     void reset();

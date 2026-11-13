@@ -9,6 +9,8 @@
 #include <regex>
 
 #include "app/icon_render.h"
+#include "interaction/tools.h"
+#include "render/cursor_layout.h"
 #include "render/msl_translate.h"
 #include "settings/settings_store.h"
 #include "system/hotkey_map.h"
@@ -316,4 +318,88 @@ TEST(icon_render) {
     const auto glyph = renderMenuBarGlyphRGBA(36);
     CHECK(glyph[(18 * 36 + 18) * 4 + 3] > 200);    // flake centre
     CHECK(glyph[3] == 0);
+}
+
+// ---- tool cursor (Hold mode layout) -----------------------------------------------------------
+std::vector<SpriteInstance> coreCursor(Tool tool, float px, float py, float dpi, float ringR) {
+    std::vector<SpriteInstance> b;
+    if (ringR > 0) {
+        SpriteInstance ring;
+        ring.x = px;
+        ring.y = py;
+        ring.halfW = ring.halfH = ringR;
+        ring.opacity = 0.35f;
+        ring.shape = Shape::Ring;
+        b.push_back(ring);
+    }
+    b.push_back(toolCursorSprite(tool, px, py, dpi));
+    return b;
+}
+
+TEST(cursor_hotspot_recovered_for_every_tool) {
+    for (float dpi : {1.0f, 2.0f}) {
+        for (Tool t : {Tool::Mitten, Tool::Shovel, Tool::Snowball}) {
+            float x = 0, y = 0;
+            CHECK(cursorHotspot(coreCursor(t, 300, 200, dpi, 0), x, y));
+            CHECK_NEAR(x, 300, 1e-3);
+            CHECK_NEAR(y, 200, 1e-3);
+        }
+    }
+    float x, y;
+    CHECK(!cursorHotspot({}, x, y));
+}
+
+TEST(cursor_hold_mitten_holds_the_arrow) {
+    for (float dpi : {1.0f, 2.0f}) {
+        const float reach = 28 * dpi;
+        const auto out = layoutCursorHold(coreCursor(Tool::Mitten, 300, 200, dpi, reach), dpi);
+        CHECK(out.size() == 2 && out[0].shape == Shape::Ring && out[1].shape == Shape::Mitten);
+        CHECK_NEAR(out[0].x, 300, 1e-4);   // ring of the brush radius centred on the arrow tip
+        CHECK_NEAR(out[0].y, 200, 1e-4);
+        CHECK_NEAR(out[0].halfW, reach, 1e-4);
+        const SpriteInstance& m = out[1];
+        CHECK_NEAR(m.rotation, kMittenCursorRotation, 1e-6);   // fingers up-left, along the arrow
+        CHECK_NEAR(m.halfW, kMittenCursorAt96 * dpi, 1e-4);
+        const float dx = m.x - 300, dy = m.y - 200;
+        // Tip inside the fingertip area: 45 % of the half height from the centre (core: 85 %).
+        CHECK_NEAR(std::sqrt(dx * dx + dy * dy), kHoldMittenHotspotShare * kMittenCursorAt96 * dpi, 1e-3);
+        CHECK(dx > 0 && dy > 0);   // the mitten body lies under the arrow body (down-right)
+        CHECK_NEAR(dx, std::sin(0.6f) * kHoldMittenHotspotShare * kMittenCursorAt96 * dpi, 1e-3);
+        CHECK_NEAR(dy, std::cos(0.6f) * kHoldMittenHotspotShare * kMittenCursorAt96 * dpi, 1e-3);
+    }
+}
+
+TEST(cursor_hold_shovel_blade_on_the_tip) {
+    for (float dpi : {1.0f, 2.0f}) {
+        const auto in = coreCursor(Tool::Shovel, 300, 200, dpi, 48 * dpi);
+        const auto out = layoutCursorHold(in, dpi);
+        CHECK(out.size() == 2 && out[0].shape == Shape::Ring && out[1].shape == Shape::Shovel);
+        CHECK_NEAR(out[0].halfW, 48 * dpi, 1e-4);   // half the shovel width
+        CHECK_NEAR(out[1].x, in[1].x, 1e-4);         // blade edge on the tip, handle up-right
+        CHECK_NEAR(out[1].y, in[1].y, 1e-4);
+        CHECK(out[1].x > 300 && out[1].y < 200);     // sprite centre up-right of the tip
+    }
+}
+
+TEST(cursor_hold_snowball_gets_a_snug_ring) {
+    for (float dpi : {1.0f, 2.0f}) {
+        const auto out = layoutCursorHold(coreCursor(Tool::Snowball, 300, 200, dpi, 0), dpi);
+        CHECK(out.size() == 2 && out[0].shape == Shape::Ring && out[1].shape == Shape::Snowball);
+        CHECK_NEAR(out[0].halfW, (kSnowballCursorAt96 + kHoldBallRingGapAt96) * dpi, 1e-4);
+        CHECK_NEAR(out[0].opacity, kHoldRingOpacity, 1e-6);
+        CHECK_NEAR(out[1].x, 300, 1e-4);   // centred on the tip
+        CHECK_NEAR(out[1].y, 200, 1e-4);
+    }
+}
+
+TEST(cursor_hold_keeps_the_held_ball_marker) {
+    std::vector<SpriteInstance> b(2);
+    b[0].shape = Shape::Ring;
+    b[0].x = b[1].x = 50;
+    b[0].y = b[1].y = 60;
+    b[0].halfW = b[0].halfH = 23;
+    b[1].shape = Shape::Snowball;
+    b[1].halfW = b[1].halfH = 20;
+    const auto out = layoutCursorHold(b, 1);
+    CHECK(out.size() == 2 && out[0].halfW == 23 && out[1].x == 50);
 }

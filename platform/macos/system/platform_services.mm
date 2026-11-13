@@ -15,6 +15,7 @@
 #include <map>
 
 #include "diagnostics/log.h"
+#include "system/cursor_hider.h"
 #include "system/hotkey_map.h"
 
 namespace snow::mac {
@@ -165,6 +166,7 @@ void writeAll(int fd, const char* s) {
 }
 
 void signalHandler(int sig) {
+    CursorHider::emergencyShow();   // never leave the user without a cursor
     // Async-signal context: only open/write/backtrace, no allocation, no locks.
     const int fd = ::open(g_crashPath, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd >= 0) {
@@ -187,7 +189,15 @@ void signalHandler(int sig) {
     ::raise(sig);
 }
 
+// SIGTERM / SIGINT / SIGHUP: give the cursor back, then die the default way.
+void terminationHandler(int sig) {
+    CursorHider::emergencyShow();
+    ::signal(sig, SIG_DFL);
+    ::raise(sig);
+}
+
 void exceptionHandler(NSException* e) {
+    CursorHider::emergencyShow();
     FILE* f = std::fopen(g_crashPath, "a");
     if (f) {
         NSString* reason = e.reason ?: @"";
@@ -219,6 +229,11 @@ void installCrashHandler(const std::string& dir) {
     sa.sa_flags = SA_ONSTACK | SA_RESETHAND;
     sigemptyset(&sa.sa_mask);
     for (int sig : {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP}) sigaction(sig, &sa, nullptr);
+    struct sigaction term{};
+    term.sa_handler = &terminationHandler;
+    term.sa_flags = SA_RESETHAND;
+    sigemptyset(&term.sa_mask);
+    for (int sig : {SIGTERM, SIGINT, SIGHUP}) sigaction(sig, &term, nullptr);
 }
 
 // =========================================================================== accessibility
