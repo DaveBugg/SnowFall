@@ -23,6 +23,7 @@
 #include "settings/hotkey.h"
 #include "settings/json.h"
 #include "settings/settings_store.h"
+#include "system/cursor_hider.h"
 #include "system/platform_services.h"
 #include "system/text_util.h"
 #include "tracker/window_tracker.h"
@@ -454,8 +455,37 @@ int runSelfTest() {
 #else
             skip("ui", "built without the SwiftUI module (Unix Makefiles generator)");
 #endif
+            // Tool cursor, both modes. Whether the private "hide in background" call works on
+            // this machine is reported, not judged; the cursor must be visible afterwards.
+            {   // pointer away from the menu bar / Dock (where the arrow is always shown)
+                const RectI& f = screens.front().frame;
+                CGWarpMouseCursorPosition(CGPointMake(f.l + f.width() / 2.0, f.t + f.height() / 2.0));
+            }
+            for (bool hideCursor : {false, true}) {
+                Settings cs = host->settings();
+                cs.interaction.enabled = true;
+                cs.interaction.hideSystemCursor = hideCursor;
+                host->applySettingsJson(toJson(cs));
+                host->remoteCommand("interaction");   // toggle on
+                pumpRunLoop(0.4);
+                const std::string mode = host->cursorModeName();
+                const bool hiddenNow = CursorHider::hidden();
+                host->remoteCommand("interaction");   // toggle off
+                pumpRunLoop(0.3);
+                if (!hideCursor) {
+                    check(mode == "hold" && !hiddenNow && CursorHider::balance() == 0,
+                          "cursor: hold mode keeps the system arrow", mode);
+                } else {
+                    check((mode == "replace" && hiddenNow) || (mode == "replace-unavailable" && !hiddenNow),
+                          "cursor: replace mode (hide system cursor)",
+                          mode == "replace" ? "private CGS call works here: cursor was hidden"
+                                            : "private CGS call unavailable here: fell back to hold");
+                    check(CursorHider::balance() == 0 && !CursorHider::hidden(),
+                          "cursor: visible again after leaving interaction mode (hide/show balance 0)");
+                }
+            }
             host->shutdown();
-            pass("app: clean shutdown");
+            check(CursorHider::balance() == 0, "app: clean shutdown (cursor visible)");
         }
     }
 

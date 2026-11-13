@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "core/snapshot.h"
+#include "render/cursor_layout.h"
 #include "tracker/desktop_model.h"
 
 namespace snow::mac {
@@ -47,7 +48,7 @@ public:
     bool visible() const;
     void setFpsCap(int fps);         // 30 or 60
     void setGlobalOpacity(float o);  // 0.1..1
-    void setCursorBadge(bool on);    // draw the tool next to the system arrow (interaction mode)
+    void setCursorDraw(CursorDraw mode);   // tool cursor: replaces the arrow / held by the arrow
 
     std::set<std::uint32_t> windowNumbers() const;   // for the tracker's ignore list
     RenderStats stats() const;

@@ -11,7 +11,8 @@
 // The tap needs the Accessibility permission. Without it the mode is "view only" (the tool
 // follows the pointer, clicks go to the apps) and a one-time explanation offers to open
 // System Settings. The system cursor cannot be hidden from a background app, so the tool
-// sprite is drawn next to the arrow (OverlaySystem::setCursorBadge).
+// sprite is drawn around the arrow (CursorDraw::Hold) unless interaction.hideSystemCursor can
+// hide it (CursorDraw::Replace, see system/cursor_hider.h and AppHost::updateCursorMode).
 //
 // Main thread only.
 #pragma once

@@ -13,6 +13,7 @@
 #include "diagnostics/log.h"
 #include "settings/hotkey.h"
 #include "settings/json.h"
+#include "system/cursor_hider.h"
 #include "system/hotkey_map.h"
 #include "system/objc_util.h"
 #include "system/text_util.h"
@@ -90,8 +91,8 @@ bool AppHost::initialize(const LaunchOptions& options) {
     system_.start([this] { updateGovernor(); });
 
     interaction_.onActiveChanged = [this](bool active) {
-        overlay_.setCursorBadge(active);
-        updateGovernor();
+        (void)active;
+        updateGovernor();   // also re-evaluates the cursor mode
     };
     interaction_.onCycleTool = [this] {
         Settings s = settings_;
@@ -147,6 +148,9 @@ void AppHost::setupUi() {
 }
 
 void AppHost::shutdown() {
+    CursorHider::show();
+    [cursorTimer_ invalidate];
+    cursorTimer_ = nil;
     if (!running_) return;
     running_ = false;
     saveNow();
@@ -212,7 +216,79 @@ void AppHost::updateGovernor() {
                   d.fpsCap, d.tuning.particleScale);
     }
     decision_ = d;
+    updateCursorMode();
     updateStatusItem();
+}
+
+// ---- tool cursor ---------------------------------------------------------------------------
+// Replace (interaction.hideSystemCursor and the private call works): the system cursor is
+// hidden and the tool sprite is the cursor, like on Windows. Hold: the arrow stays visible and
+// the tool is drawn around it. While the pointer is over something drawn above the snow (menu
+// bar, Dock) the arrow is shown even in Replace mode, because the tool would be hidden there.
+
+bool AppHost::pointerOverSystemChrome() const {
+    CGEventRef e = CGEventCreate(nullptr);
+    if (!e) return false;
+    const CGPoint p = CGEventGetLocation(e);
+    CFRelease(e);
+    const int x = static_cast<int>(std::floor(p.x)), y = static_cast<int>(std::floor(p.y));
+    for (const ScreenInfo& s : screens_)
+        if (s.frame.contains(x, y) && y < s.visible.t) return true;   // menu bar
+    if (layout_)
+        for (const WindowInfo& w : layout_->windows)
+            if (w.kind == WindowKind::Taskbar && w.bounds.contains(x, y)) return true;   // Dock
+    return false;
+}
+
+void AppHost::updateCursorMode() {
+    const bool active = running_ && interaction_.active() && decision_.overlaysVisible;
+    const bool wantReplace = active && settings_.interaction.hideSystemCursor && !cursorReplaceFailed_;
+    bool replaced = false;
+    if (wantReplace && !pointerOverSystemChrome()) {
+        replaced = CursorHider::hide();
+        if (!replaced) {
+            cursorReplaceFailed_ = true;   // fall back to Hold for this session
+            SNOW_LOGW("cursor: cannot hide the system cursor - drawing the tool around it instead");
+        }
+    }
+    if (!replaced) CursorHider::show();
+    overlay_.setCursorDraw(replaced ? CursorDraw::Replace : CursorDraw::Hold);
+    if (active) lastInteractionActive_ = CFAbsoluteTimeGetCurrent();
+
+    // While Replace is wanted: follow the pointer over the menu bar / Dock (30 Hz). The same
+    // timer is the watchdog: a cursor hidden by us outside interaction mode for > 1 s is shown.
+    const bool needTimer = wantReplace || CursorHider::hidden();
+    if (needTimer && !cursorTimer_) {
+        AppHost* self = this;
+        cursorTimer_ = [NSTimer timerWithTimeInterval:1.0 / 30.0
+                                              repeats:YES
+                                                block:^(NSTimer*) {
+                                                  self->cursorTick();
+                                                }];
+        [NSRunLoop.mainRunLoop addTimer:cursorTimer_ forMode:NSRunLoopCommonModes];
+    }
+}
+
+void AppHost::cursorTick() {
+    const bool active = running_ && interaction_.active() && decision_.overlaysVisible;
+    if (active) {
+        lastInteractionActive_ = CFAbsoluteTimeGetCurrent();
+        const bool wantReplace = settings_.interaction.hideSystemCursor && !cursorReplaceFailed_;
+        if (wantReplace && CursorHider::hidden() == pointerOverSystemChrome()) updateCursorMode();
+        if (wantReplace) return;
+    } else if (CursorHider::hidden() && CFAbsoluteTimeGetCurrent() - lastInteractionActive_ > 1.0) {
+        SNOW_LOGW("cursor: watchdog shows the cursor (hidden outside interaction mode)");
+        CursorHider::show();
+    }
+    if (!CursorHider::hidden() && !(active && settings_.interaction.hideSystemCursor && !cursorReplaceFailed_)) {
+        [cursorTimer_ invalidate];
+        cursorTimer_ = nil;
+    }
+}
+
+std::string AppHost::cursorModeName() const {
+    if (!settings_.interaction.hideSystemCursor) return "hold";
+    return cursorReplaceFailed_ ? "replace-unavailable" : "replace";
 }
 
 // ---- settings ----------------------------------------------------------------------------
@@ -241,6 +317,7 @@ void AppHost::applySettings(Settings next, bool fromUi) {
         tracker_.requestResync();
     }
     if (running_ && !(next.hotkeys == prev.hotkeys)) registerHotkeys();
+    if (next.interaction.hideSystemCursor && !prev.interaction.hideSystemCursor) cursorReplaceFailed_ = false;
 
     interaction_.setFeatureEnabled(settings_.interaction.enabled);
     interaction_.setHoldKeyEnabled(settings_.interaction.holdKeyEnabled);
@@ -539,6 +616,8 @@ std::string AppHost::diagnosticsJson() const {
     o.set("accessibility", accessibilityTrusted());
     o.set("interactionActive", interaction_.active());
     o.set("eventTap", interaction_.tapInstalled());
+    o.set("cursorMode", cursorModeName());
+    o.set("cursorHidden", CursorHider::hidden());
     o.set("gpu", overlay_.deviceName());
     o.set("gpuErrors", rs.gpuErrors);
     const TrackerStats ts = tracker_.stats();
@@ -553,6 +632,7 @@ std::string AppHost::diagnosticsJson() const {
 
 void AppHost::showAccessibilityExplanation() {
     if (quiet_) return;
+    CursorHider::show();   // never run a dialog with a hidden cursor
     NSAlert* a = [NSAlert new];
     a.messageText = tr(Str::AccessibilityNeededTitle);
     a.informativeText = tr(Str::AccessibilityNeededText);
@@ -563,6 +643,7 @@ void AppHost::showAccessibilityExplanation() {
         requestAccessibility();
         openAccessibilitySettings();
     }
+    updateCursorMode();
 }
 
 void AppHost::showFirstRunWelcome() {
