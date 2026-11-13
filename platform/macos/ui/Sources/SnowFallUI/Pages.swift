@@ -239,6 +239,14 @@ struct ToolsPage: View {
             SnowToggle(title: t["ChkInteraction"], isOn: store.binding(\.interaction.enabled))
             Group {
                 SnowToggle(title: t["ChkHoldKey"], isOn: store.binding(\.interaction.holdKeyEnabled))
+                VStack(alignment: .leading, spacing: 2) {
+                    SnowToggle(title: t["ChkHideCursorMac"], isOn: store.binding(\.interaction.hideSystemCursor),
+                               hint: t["HideCursorHintMac"])
+                    if i.hideSystemCursor && store.diagnostics.cursorMode == "replace-unavailable" {
+                        HintText(text: t["CursorReplaceUnavailableMac"])
+                            .padding(.leading, 46)
+                    }
+                }
                 SnowToggle(title: t["ChkBlockClicks"], isOn: store.binding(\.interaction.blockClicksWhileHeld),
                            hint: t["BlockClicksHint"])
                 SnowToggle(title: t["ChkAllMonitors"], isOn: store.binding(\.interaction.objectsOnAllMonitors))

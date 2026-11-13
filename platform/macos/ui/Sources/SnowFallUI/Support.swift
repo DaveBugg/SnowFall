@@ -22,6 +22,8 @@ struct Diagnostics: Equatable {
     var interactionKeys = ""
     var logPath = ""
     var version = ""
+    /// "replace-unavailable" when the app could not hide the system cursor (interaction.hideSystemCursor).
+    var cursorMode = ""
     var valid = false
 
     init() {}
@@ -50,6 +52,7 @@ struct Diagnostics: Equatable {
         interactionKeys = str("interactionKeys")
         logPath = str("logPath")
         version = str("version")
+        cursorMode = str("cursorMode")
         valid = true
     }
 }

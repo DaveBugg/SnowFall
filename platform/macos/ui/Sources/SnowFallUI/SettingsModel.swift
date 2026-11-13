@@ -59,6 +59,7 @@ struct InteractionSettings: Codable, Equatable {
     var blockClicksWhileHeld = true
     var objectsOnAllMonitors = false
     var umbrellaCursor = true
+    var hideSystemCursor = false     // macOS: the tool replaces the system cursor (experimental)
 }
 
 struct PerformanceSettings: Codable, Equatable {
@@ -181,6 +182,7 @@ extension InteractionSettings {
         blockClicksWhileHeld = c.value(.blockClicksWhileHeld, blockClicksWhileHeld)
         objectsOnAllMonitors = c.value(.objectsOnAllMonitors, objectsOnAllMonitors)
         umbrellaCursor = c.value(.umbrellaCursor, umbrellaCursor)
+        hideSystemCursor = c.value(.hideSystemCursor, hideSystemCursor)
     }
 }
 
