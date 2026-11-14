@@ -8,6 +8,7 @@
 
 #include "quick_panel.h"
 #include "strings.h"
+#include "ui_util.h"
 
 namespace snow {
 namespace {
@@ -138,6 +139,11 @@ struct TrayIcon::Impl {
             AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : MF_UNCHECKED), menuId(c), tr(text));
         };
 
+        if (!state.updateVersion.empty()) {
+            AppendMenuW(menu, MF_STRING, menuId(TrayCommand::OpenUpdate),
+                        ui::format(tr(StrId::MenuUpdateAvailableFmt), state.updateVersion.c_str()).c_str());
+            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        }
         item(menu, TrayCommand::TogglePause, state.paused ? StrId::MenuResume : StrId::MenuPause);
 
         HMENU intensity = CreatePopupMenu();
@@ -203,7 +209,7 @@ struct TrayIcon::Impl {
         PostMessageW(owner, WM_NULL, 0, 0);
         DestroyMenu(menu);   // destroys the submenus too
         menuOpen = false;
-        if (cmd >= static_cast<int>(kMenuBase) && cmd <= static_cast<int>(menuId(TrayCommand::OpenQuickPanel))) {
+        if (cmd >= static_cast<int>(kMenuBase) && cmd <= static_cast<int>(menuId(TrayCommand::OpenUpdate))) {
             post(static_cast<TrayCommand>(cmd - static_cast<int>(kMenuBase)));
         } else if (cmd >= static_cast<int>(kUserPresetBase) && cmd < static_cast<int>(kUserPresetBase) + 50) {
             post(TrayCommand::ApplyUserPreset, cmd - static_cast<int>(kUserPresetBase));

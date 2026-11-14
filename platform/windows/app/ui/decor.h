@@ -73,6 +73,7 @@ struct HeaderAnim {
 struct HeaderChip {
     D2D1_RECT_F rect{};        // pill behind a group of header controls (empty = none)
     std::wstring caption;      // drawn left of the pill
+    bool limitsText = true;    // title / subtitle end before it (false: a chip on the title line)
 };
 void drawHeaderStatic(Painter& p, D2D1_SIZE_F size, const Palette& pal, const std::wstring& title, const std::wstring& subtitle,
                       const HeaderChip* chips, int chipCount);

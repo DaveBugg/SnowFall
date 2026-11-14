@@ -286,7 +286,7 @@ void Skin::drawButtonLike(HWND hwnd, const Style& st, HDC dc, const RECT& rc, UI
                 break;
             }
             case Role::Link: {
-                const COLORREF lc = p.dark ? p.heading : p.accent;
+                const COLORREF lc = st.surface == Surface::HeaderChip ? p.headerText : p.dark ? p.heading : p.accent;
                 TextStyle ls{pt.bodySize(), DWRITE_FONT_WEIGHT_SEMI_BOLD};
                 ls.align = DWRITE_TEXT_ALIGNMENT_CENTER;
                 const float tw = pt.measure(text, ls);

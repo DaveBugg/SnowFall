@@ -159,6 +159,14 @@ enum CtlId : int {
     IDC_POWERED_BY,
     IDC_LINK_GITHUB,
     IDC_LINK_TELEGRAM,
+    IDC_UPD_CHECK,                            // «Проверять обновления» toggle (updates.check)
+    IDC_UPD_CHECK_NOW,
+    IDC_UPD_STATUS,
+    IDC_UPD_HINT,                             // shown when the update is installed manually
+    IDC_UPD_INSTALL,
+    IDC_UPD_PAGE,                             // release page in the browser (manual install)
+    IDC_UPD_NOTES,                            // «Что нового» (release page)
+    IDC_HDR_UPDATE,                           // header link «Доступна версия …» -> «О программе»
 
     // Process picker window
     IDC_PICK_LIST = 1500,

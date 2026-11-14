@@ -379,7 +379,7 @@ void drawHeaderStatic(Painter& p, D2D1_SIZE_F size, const Palette& pal, const st
                       const HeaderChip* chips, int chipCount) {
     float textRight = size.width - 8;
     for (int i = 0; i < chipCount; ++i) {
-        if (chips[i].rect.right <= chips[i].rect.left) continue;
+        if (chips[i].rect.right <= chips[i].rect.left || !chips[i].limitsText) continue;
         TextStyle cs{p.bodySize() * 0.92f};
         const float cw = p.measure(chips[i].caption, cs);
         textRight = std::min(textRight, chips[i].rect.left - cw - 18);
@@ -417,6 +417,7 @@ void drawHeaderStatic(Painter& p, D2D1_SIZE_F size, const Palette& pal, const st
         const float r = (c.bottom - c.top) / 2;
         p.fillRound(c, r, col(pal.headerChip));
         p.strokeRound(c, r, col(pal.headerText, 0.25f), 1.0f);
+        if (chips[i].caption.empty()) continue;
         TextStyle cs{p.bodySize() * 0.92f};
         cs.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
         p.text(chips[i].caption, D2D1::RectF(c.left - 160, c.top, c.left - 8, c.bottom), cs, col(pal.headerTextSecondary));

@@ -242,6 +242,9 @@ struct SettingsWindow::Impl {
     D2D1_RECT_F chipRect{};   // theme swatch container in the header, DIPs
     D2D1_RECT_F toolChipRect{};
     HWND hdrTools[3] = {};
+    HWND hdrUpdate = nullptr;       // header link «Доступна версия …»
+    D2D1_RECT_F updChipRect{};      // its pill in the header, DIPs (empty = hidden)
+    update::Status upd;             // last status pushed by the app (kept while closed)
     std::wstring interactionKeys;   // from DiagnosticsInfo
     Layer pvBase, pvDrift, countdownLayer, festiveLayer;
     std::uint64_t pvDriftKey = 0;
@@ -628,7 +631,7 @@ struct SettingsWindow::Impl {
         make(p, L"STATIC", SS_LEFT | SS_NOPREFIX | SS_CENTERIMAGE | WS_GROUP, 0, IDC_ABOUT_TITLE, 78, 10, 176, 34,
              static_cast<int>(StrId::AppName), FontKind::Title);
         label(p, StrId::PoweredBy, 258, 13, 140, 30, IDC_POWERED_BY, TextRole::Secondary);
-        // Links open only on an explicit click / Enter (ShellExecute); the app never connects anywhere.
+        // Links open only on an explicit click / Enter (ShellExecute in the browser).
         struct LinkDef {
             int id;
             const wchar_t* text;
@@ -648,15 +651,102 @@ struct SettingsWindow::Impl {
             setTextAllowance(b, 10);
         }
         value(p, IDC_ABOUT_VERSION, 79, 44, 465, 20, TextRole::Secondary);
-        textBlock(p, StrId::AboutDescription, 16, 78, 528, 40);
-        heading(p, StrId::GroupPrivacy, 16, 128, 528);
-        textBlock(p, StrId::AboutPrivacy, 16, 156, 528, 40, TextRole::Secondary);
-        heading(p, StrId::GroupLog, 16, 206, 528);
-        label(p, StrId::LblLogFile, 16, 234, 110, 30);
-        fieldEdit(p, IDC_LOG_PATH, 128, 234, 416, 30, ES_READONLY);
-        button(p, IDC_OPEN_LOG_FOLDER, StrId::BtnOpenLogFolder, 16, 274, 240, 30);
-        textBlock(p, StrId::AboutLicence, 16, 324, 528, 60, TextRole::Secondary);
+        textBlock(p, StrId::AboutDescription, 16, 72, 528, 40);
+        heading(p, StrId::GroupPrivacy, 16, 116, 528);
+        textBlock(p, StrId::AboutPrivacy, 16, 142, 528, 64, TextRole::Secondary);   // 3-4 lines (RU at 120 DPI)
+        // Updates: toggle + «Проверить сейчас», status line, manual hint, actions (shown per stage).
+        heading(p, StrId::GroupUpdates, 16, 208, 528);
+        toggle(p, IDC_UPD_CHECK, StrId::ChkCheckUpdates, 16, 235, 350);
+        button(p, IDC_UPD_CHECK_NOW, StrId::BtnCheckUpdates, 384, 232, 160, 30);
+        value(p, IDC_UPD_STATUS, 16, 262, 528, 22, TextRole::Normal);
+        label(p, StrId::UpdateManualHint, 16, 283, 528, 20, IDC_UPD_HINT, TextRole::Hint);
+        button(p, IDC_UPD_INSTALL, StrId::BtnUpdateInstall, 16, 304, 200, 30, true);
+        button(p, IDC_UPD_PAGE, StrId::BtnOpenReleasePage, 16, 304, 200, 30);
+        button(p, IDC_UPD_NOTES, StrId::BtnWhatsNew, 226, 304, 160, 30);
+        heading(p, StrId::GroupLog, 16, 342, 528);
+        label(p, StrId::LblLogFile, 16, 368, 110, 30);
+        fieldEdit(p, IDC_LOG_PATH, 128, 368, 236, 30, ES_READONLY);
+        button(p, IDC_OPEN_LOG_FOLDER, StrId::BtnOpenLogFolder, 372, 368, 172, 30);
+        textBlock(p, StrId::AboutLicence, 16, 406, 528, 70, TextRole::Secondary);
     }
+
+    // ---- updates ---------------------------------------------------------------------------------
+    void showCtl(int id, bool on) {
+        HWND c = ctl(id);
+        if (!c || ((GetWindowLongPtrW(c, GWL_STYLE) & WS_VISIBLE) != 0) == on) return;
+        if (!on && GetFocus() == c) SetFocus(nav[curTab]);
+        ShowWindow(c, on ? SW_SHOWNA : SW_HIDE);
+    }
+
+    std::wstring updateStatusText(TextRole& role) const {
+        using update::Stage;
+        role = TextRole::Normal;
+        const std::wstring latest = widen(upd.latest);
+        switch (upd.stage) {
+            case Stage::Idle: role = TextRole::Secondary; return tr(StrId::UpdateIdle);
+            case Stage::Checking: return tr(StrId::UpdateChecking);
+            case Stage::UpToDate: role = TextRole::Ok; return tr(StrId::UpdateUpToDate);
+            case Stage::Available: role = TextRole::Ok; return format(tr(StrId::UpdateAvailableFmt), latest.c_str());
+            case Stage::Downloading: return format(tr(StrId::UpdateDownloadingFmt), std::clamp(upd.progress, 0, 100));
+            case Stage::Installing: return tr(StrId::UpdateInstalling);
+            case Stage::Failed: {
+                role = TextRole::Error;
+                const StrId reason = upd.error == "verify"    ? StrId::UpdateErrVerify
+                                     : upd.error == "install" ? StrId::UpdateErrInstall
+                                                              : StrId::UpdateErrNetwork;
+                return format(tr(StrId::UpdateFailedFmt), tr(reason));
+            }
+        }
+        return {};
+    }
+
+    // Header link «Доступна версия …» on the title line (only while an update is available).
+    void layoutHeaderUpdate() {
+        if (!hdrUpdate) return;
+        const bool show = upd.stage == update::Stage::Available && !upd.latest.empty();
+        D2D1_RECT_F chip{};
+        if (show) {
+            const std::wstring text = format(tr(StrId::HeaderUpdateFmt), widen(upd.latest).c_str());
+            setTextIfChanged(hdrUpdate, text);
+            Painter& pt = Painter::instance();
+            TextStyle ts{pt.bodySize() * 1.75f, DWRITE_FONT_WEIGHT_SEMI_BOLD};
+            ts.display = true;
+            const int titleW = static_cast<int>(pt.measure(tr(StrId::AppName), ts) + 0.5f);
+            const int linkW = static_cast<int>(pt.measure(text, TextStyle{pt.bodySize(), DWRITE_FONT_WEIGHT_SEMI_BOLD}) + 0.5f) + 16;
+            const int x = 62 + titleW + 16;
+            const int y = pal().garland ? 6 : 10;
+            chip = D2D1::RectF(static_cast<float>(x), static_cast<float>(y), static_cast<float>(x + linkW + 16), static_cast<float>(y + 26));
+            place(hdrUpdate, x + 8, y + 2, linkW, 22);
+        }
+        const bool moved = chip.left != updChipRect.left || chip.right != updChipRect.right || chip.top != updChipRect.top;
+        updChipRect = chip;
+        if (show != ((GetWindowLongPtrW(hdrUpdate, GWL_STYLE) & WS_VISIBLE) != 0)) {
+            if (!show && GetFocus() == hdrUpdate) SetFocus(nav[curTab]);
+            ShowWindow(hdrUpdate, show ? SW_SHOWNA : SW_HIDE);
+        }
+        if (moved && header) InvalidateRect(header, nullptr, FALSE);
+        if (show) InvalidateRect(hdrUpdate, nullptr, FALSE);
+    }
+
+    void refreshUpdate() {
+        if (!built) return;
+        using update::Stage;
+        TextRole role = TextRole::Normal;
+        const std::wstring text = updateStatusText(role);
+        HWND line = ctl(IDC_UPD_STATUS);
+        skin.setTextRole(line, role);
+        setTextIfChanged(line, text);
+        if (line) InvalidateRect(line, nullptr, TRUE);
+        const bool available = upd.stage == Stage::Available;
+        showCtl(IDC_UPD_HINT, available && !upd.canInstall);
+        showCtl(IDC_UPD_INSTALL, available && upd.canInstall);
+        showCtl(IDC_UPD_PAGE, (available && !upd.canInstall) || (upd.stage == Stage::Failed && !upd.latest.empty()));
+        showCtl(IDC_UPD_NOTES, available);
+        enable(IDC_UPD_CHECK_NOW, upd.stage != Stage::Checking && upd.stage != Stage::Downloading && upd.stage != Stage::Installing);
+        layoutHeaderUpdate();   // (hiding / showing a control repaints the page area behind it)
+    }
+
+    std::string updatePageUrl() const { return upd.pageUrl.empty() ? std::string(update::kReleasesPage) : upd.pageUrl; }
 
     void build() {
         skin.setSurface(hwnd, Surface::Window);
@@ -684,6 +774,15 @@ struct SettingsWindow::Impl {
             st.swatch = static_cast<UiTheme>(i);
             skin.set(swatches[i], st);
             setTextAllowance(swatches[i], -1);
+        }
+        hdrUpdate = make(-2, L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP | WS_GROUP, 0, IDC_HDR_UPDATE, 0, 0, 0, 0);
+        {
+            Style st;
+            st.role = Role::Link;
+            st.surface = Surface::HeaderChip;
+            skin.set(hdrUpdate, st);
+            setTextAllowance(hdrUpdate, 10);
+            ShowWindow(hdrUpdate, SW_HIDE);
         }
         // Navigation.
         for (int i = 0; i < kTabCount; ++i) {
@@ -840,6 +939,8 @@ struct SettingsWindow::Impl {
             toolChipRect = D2D1::RectF(static_cast<float>(toolX), 11, static_cast<float>(toolX + chipW), 53);
             for (int i = 0; i < 3; ++i) place(hdrTools[i], toolX + 7 + i * 34, 15, 34, 34);
         }
+        updChipRect = D2D1::RectF();   // re-placed for the theme / DPI / language
+        layoutHeaderUpdate();
         for (HWND page : pages) place(page, pageX, pageY, kPageW, kPageH);
         for (const Ctl& c : ctls) {
             if (c.page < 0) continue;
@@ -1027,6 +1128,10 @@ struct SettingsWindow::Impl {
             }
         }
         for (int i = 0; i < kTabCount; ++i) SendMessageW(nav[i], BM_SETCHECK, i == curTab ? BST_CHECKED : BST_UNCHECKED, 0);
+        if (HWND c = ctl(IDC_UPD_CHECK)) {
+            const WPARAM want = s.updates.check ? BST_CHECKED : BST_UNCHECKED;
+            if (static_cast<WPARAM>(SendMessageW(c, BM_GETCHECK, 0, 0)) != want) SendMessageW(c, BM_SETCHECK, want, 0);
+        }
         for (const SliderField& f : kSliderFields) {
             const int v = std::clamp(f.ref(s), f.lo, f.hi);
             HWND tb = ctl(f.id);
@@ -1069,6 +1174,7 @@ struct SettingsWindow::Impl {
         sync();
         setUpMessage(s.userPresets.empty() ? L"" : tr(StrId::PresetsHint), TextRole::Secondary);
         refreshDiagnostics();
+        refreshUpdate();
     }
 
     void applyLanguage() {
@@ -1185,15 +1291,17 @@ struct SettingsWindow::Impl {
         if (id == IDC_HEADER) {
             const std::wstring sub = holdHint(false);
             headerAnim.ensure(0xC0FFEEu, 46);
-            swprintf_s(key, L"hdr|%d|%ls|%.1f|%.1f|%ls", static_cast<int>(s.system.uiTheme), sub.c_str(), chipRect.left, toolChipRect.left,
-                       tr(StrId::CaptionTheme));
-            HeaderChip chips[2];
+            swprintf_s(key, L"hdr|%d|%ls|%.1f|%.1f|%ls|%.1f|%.1f|%.1f", static_cast<int>(s.system.uiTheme), sub.c_str(), chipRect.left,
+                       toolChipRect.left, tr(StrId::CaptionTheme), updChipRect.left, updChipRect.right, updChipRect.top);
+            HeaderChip chips[3];
             chips[0].rect = toolChipRect;
             chips[0].caption = tr(StrId::GroupTool);
             chips[1].rect = chipRect;
             chips[1].caption = tr(StrId::CaptionTheme);
+            chips[2].rect = updChipRect;
+            chips[2].limitsText = false;
             headerAnim.layer.render(key, W, H, dpi, [&](ID2D1RenderTarget*, D2D1_SIZE_F size) {
-                drawHeaderStatic(pt, size, P, tr(StrId::AppName), sub, chips, 2);
+                drawHeaderStatic(pt, size, P, tr(StrId::AppName), sub, chips, 3);
             });
             if (comp.begin(headerAnim.layer, W, H)) {
                 drawHeaderDynamic(comp, sc, P, headerAnim, static_cast<float>(H) / sc);
@@ -1334,8 +1442,10 @@ struct SettingsWindow::Impl {
 
     void restoreDefaults() {
         std::vector<UserPreset> keep = s.userPresets;   // user data, not a setting: kept
+        const UpdateSettings updates = s.updates;      // the user's answer about update checks: kept
         s = Settings{};
         s.userPresets = std::move(keep);
+        s.updates = updates;
         applyLanguage();
         applyTheme();
         sync();
@@ -1534,6 +1644,12 @@ struct SettingsWindow::Impl {
             return;
         }
         const Settings before = s;
+        if (id == IDC_UPD_CHECK) {   // turning the check on also answers the one-time question
+            s.updates.check = SendMessageW(source, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            if (s.updates.check) s.updates.asked = true;
+            if (!(s == before)) changed();
+            return;
+        }
         for (const BoolField& f : kBoolFields) {
             if (f.id != id) continue;
             f.ref(s) = SendMessageW(source, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -1616,6 +1732,20 @@ struct SettingsWindow::Impl {
                 if (const Style* st = skin.find(source); st && st->url) {
                     ShellExecuteW(nullptr, L"open", st->url, nullptr, nullptr, SW_SHOWNORMAL);
                 }
+                break;
+            case IDC_HDR_UPDATE:
+                showTab(kTabCount - 1);
+                SetFocus(nav[kTabCount - 1]);
+                break;
+            case IDC_UPD_CHECK_NOW:
+                if (cb.onCheckUpdates) cb.onCheckUpdates();
+                break;
+            case IDC_UPD_INSTALL:
+                if (upd.stage == update::Stage::Available && upd.canInstall && cb.onInstallUpdate) cb.onInstallUpdate();
+                break;
+            case IDC_UPD_PAGE:
+            case IDC_UPD_NOTES:
+                if (cb.onOpenUpdatePage) cb.onOpenUpdatePage(updatePageUrl());
                 break;
             case IDC_OPEN_LOG_FOLDER: {
                 if (!cb.getDiagnostics) break;
@@ -1790,6 +1920,8 @@ struct SettingsWindow::Impl {
                 const LRESULT res = DefWindowProcW(hwnd, msg, wp, lp);
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
                 for (HWND& t : self->hdrTools) t = nullptr;
+                self->hdrUpdate = nullptr;
+                self->updChipRect = D2D1::RectF();
                 self->hwnd = self->header = self->preview = self->previewReset = self->countdownWnd = nullptr;
                 self->statusLine = self->restoreBtn = self->closeBtn = nullptr;
                 for (HWND& page : self->pages) page = nullptr;
@@ -1923,6 +2055,7 @@ struct SettingsWindow::Impl {
         setUpMessage(s.userPresets.empty() ? L"" : tr(StrId::PresetsHint), TextRole::Secondary);
         showUpEditor(false);
         refreshDiagnostics();
+        refreshUpdate();
         showTab(0);
         return true;
     }
@@ -1971,6 +2104,21 @@ void SettingsWindow::update(const Settings& current) {
     d.applyTheme();
     d.sync();
     if (d.snowPreview) d.snowPreview->apply(d.s);
+}
+
+void SettingsWindow::setUpdateStatus(const update::Status& status) {
+    Impl& d = *impl_;
+    if (d.upd == status) return;
+    d.upd = status;
+    d.refreshUpdate();
+}
+
+void SettingsWindow::showAbout(const Settings& current) {
+    show(current);
+    Impl& d = *impl_;
+    if (!d.hwnd) return;
+    d.showTab(kTabCount - 1);
+    SetFocus(d.nav[kTabCount - 1]);
 }
 
 bool SettingsWindow::preTranslateMessage(MSG* msg) {

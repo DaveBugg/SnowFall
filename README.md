@@ -30,8 +30,10 @@ macOS 13+ (Objective-C++, Metal, SwiftUI; Apple Silicon and Intel) — see
 - **Three settings themes** with a live preview, a quick panel next to the tray icon, user
   presets, per-application exclusions (snow passes behind or flows around their windows).
 - **Lightweight and private**: about 0.2–0.5 % CPU, ~35 MB RAM, auto-pause for fullscreen apps,
-  locked sessions and sleep. No network access, no telemetry, no reading of other windows'
-  contents, no injection, no admin rights.
+  locked sessions and sleep. No telemetry, no reading of other windows' contents, no injection,
+  no admin rights. The only network use is the optional update check (asked once): one request
+  a day to the GitHub Releases API with nothing about you; updates are installed only from
+  signed releases.
 
 | Quick panel | Snowman skins |
 |---|---|

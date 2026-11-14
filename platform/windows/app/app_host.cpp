@@ -1,11 +1,13 @@
 #include "app/app_host.h"
 
+#include <commctrl.h>
 #include <dbt.h>
 #include <powrprof.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
 
 #include <algorithm>
+#include <ctime>
 
 #include "app/cursor_hider.h"
 #include "app/legacy_migration.h"
@@ -13,6 +15,7 @@
 #include "diagnostics/log.h"
 #include "settings/autostart.h"
 #include "settings/hotkey.h"
+#include "update/update.h"
 
 namespace snow {
 namespace {
@@ -85,6 +88,11 @@ bool AppHost::initialize(HINSTANCE instance, const LaunchOptions& options) {
     cb.getDiagnostics = [this] { return diagnostics(); };
     cb.validateHotkey = [this](const std::string& t) { return validateHotkey(t); };
     cb.onFireworks = [this] { runner_.triggerFireworks(); };
+    cb.onCheckUpdates = [this] { startUpdateCheck(true); };
+    cb.onInstallUpdate = [this] {
+        if (updater_ && updater_->install()) SNOW_LOGI("update: install requested by the user");
+    };
+    cb.onOpenUpdatePage = [this](const std::string& url) { openUpdatePage(url); };
     settingsWindow_.initialize(instance, std::move(cb));
 
     if (!overlay_.initialize(instance, &snapshots_, hwnd_, kMsgRenderFailed)) {
@@ -112,6 +120,7 @@ bool AppHost::initialize(HINSTANCE instance, const LaunchOptions& options) {
     applySettings(settings_, false);
     registerHotkeys(!options.autostart);
     running_ = true;
+    initUpdates(options);
 
     if (options.openSettings) openSettings();
     if (!options.autostart && !options.openSettings) {
@@ -140,6 +149,7 @@ int AppHost::run() {
 void AppHost::shutdown() {
     if (!hwnd_ && !running_) return;
     running_ = false;
+    if (updater_) updater_->shutdown();   // aborts a request in progress
     saveNow();
     unregisterHotkeys();
     interaction_.shutdown();
@@ -190,6 +200,9 @@ LRESULT AppHost::handle(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                                  L"restart the app."),
                               true);
             return 0;
+        case kMsgUpdate:
+            onUpdateStatus();
+            return 0;
         case kMsgCycleTool: {
             Settings s = settings_;
             s.interaction.tool = static_cast<Tool>((static_cast<int>(s.interaction.tool) + 1) % 3);
@@ -215,6 +228,11 @@ LRESULT AppHost::handle(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (wp == kTimerSave) {
                 KillTimer(hwnd, kTimerSave);
                 saveNow();
+            } else if (wp == kTimerUpdateAsk) {
+                askAboutUpdates();
+            } else if (wp == kTimerUpdateCheck) {
+                SetTimer(hwnd, kTimerUpdateCheck, 60 * 60 * 1000, nullptr);   // re-evaluated hourly
+                if (update::autoCheckDue(settings_.updates, static_cast<std::int64_t>(std::time(nullptr)))) startUpdateCheck(false);
             }
             return 0;
         case WM_WTSSESSION_CHANGE:
@@ -363,6 +381,8 @@ void AppHost::applySettings(Settings next, bool fromSettingsWindow) {
         tracker_.requestResync();
     }
     if (!(next.hotkeys == prev.hotkeys) && running_) registerHotkeys(true);
+    // Checks just turned on (About page): evaluate the daily schedule soon, then hourly again.
+    if (next.updates.check && !prev.updates.check && running_) SetTimer(hwnd_, kTimerUpdateCheck, 3000, nullptr);
     if (next.performance.detailedLog != prev.performance.detailedLog || !running_) {
         const bool detailed = next.performance.detailedLog;
         log::configure(detailed ? log::Level::Debug : log::Level::Info,
@@ -504,6 +524,10 @@ void AppHost::onTrayCommand(TrayCommand cmd) {
         case TrayCommand::CallFireworks: runner_.triggerFireworks(); break;
         case TrayCommand::ApplyUserPreset: break;   // handled in handle(): needs lParam
         case TrayCommand::OpenQuickPanel: tray_.showQuickPanel(); break;
+        case TrayCommand::OpenUpdate:
+            settingsWindow_.showAbout(settings_);
+            syncTrackerWindows();
+            break;
         case TrayCommand::Exit: PostQuitMessage(0); break;
     }
 }
@@ -542,6 +566,7 @@ void AppHost::updateTray() {
     st.leftClickTogglesPause = settings_.system.trayLeftClickTogglesPause;
     for (const auto& p : settings_.userPresets) st.userPresetNames.push_back(widen(p.name));
     st.interactionKeys = holdKeysText();
+    if (updStatus_.stage == update::Stage::Available) st.updateVersion = widen(updStatus_.latest);
     // Slider drags call this many times per second: only touch the shell (NIM_MODIFY is a
     // cross-process call) when something the tray shows actually changed.
     const bool same = trayStateValid_ && st.paused == lastTray_.paused && st.hidden == lastTray_.hidden &&
@@ -549,11 +574,110 @@ void AppHost::updateTray() {
                       st.preset == lastTray_.preset && st.tool == lastTray_.tool &&
                       st.leftClickTogglesPause == lastTray_.leftClickTogglesPause &&
                       st.userPresetNames == lastTray_.userPresetNames &&
-                      st.interactionKeys == lastTray_.interactionKeys;
+                      st.interactionKeys == lastTray_.interactionKeys && st.updateVersion == lastTray_.updateVersion;
     if (same) return;
     lastTray_ = st;
     trayStateValid_ = true;
     tray_.setState(st);
+}
+
+// ---- updates ---------------------------------------------------------------
+
+void AppHost::initUpdates(const LaunchOptions& options) {
+    const std::wstring dir = SettingsStore::dataDirectory() + L"\\updates";
+    update::Updater::cleanDownloads(dir);   // installers of earlier updates
+    const bool installed = update::isInstallerCopy(exePath_);
+    update::UpdaterConfig cfg;
+    cfg.currentVersion = SNOW_VERSION;
+    cfg.installable = installed;
+    cfg.downloadDir = dir;
+    HWND host = hwnd_;
+    updater_ = std::make_unique<update::Updater>(std::move(cfg), update::makeWinHttpTransport("SnowFall/" SNOW_VERSION),
+                                                 &update::launchInstaller,
+                                                 [host] { PostMessageW(host, kMsgUpdate, 0, 0); });
+    updStatus_ = updater_->status();
+    settingsWindow_.setUpdateStatus(updStatus_);
+    SNOW_LOGI("update: checks %s (asked %d), installed copy %d", settings_.updates.check ? "on" : "off",
+              settings_.updates.asked ? 1 : 0, installed ? 1 : 0);
+    // The one-time question comes a few seconds after the start (after the welcome balloon).
+    // Test / portable runs with their own --data-dir are never asked.
+    if (!settings_.updates.asked && !options.customDataDir) SetTimer(hwnd_, kTimerUpdateAsk, 8000, nullptr);
+    SetTimer(hwnd_, kTimerUpdateCheck, static_cast<UINT>(update::kStartupDelaySeconds * 1000.0), nullptr);
+}
+
+void AppHost::askAboutUpdates() {
+    KillTimer(hwnd_, kTimerUpdateAsk);
+    if (settings_.updates.asked || !running_) return;
+    if (ownPopupOpen()) {   // tray menu / message box of ours is open: ask a bit later
+        SetTimer(hwnd_, kTimerUpdateAsk, 5000, nullptr);
+        return;
+    }
+    enum { kYes = 100, kNo = 101 };
+    const TASKDIALOG_BUTTON buttons[] = {{kYes, tr(StrId::BtnUpdateAskYes)}, {kNo, tr(StrId::BtnUpdateAskNo)}};
+    HICON icon = TrayIcon::createAppIcon(GetSystemMetrics(SM_CXICON));
+    TASKDIALOGCONFIG c{};
+    c.cbSize = sizeof c;
+    c.hInstance = instance_;
+    c.dwFlags = icon ? TDF_USE_HICON_MAIN : 0;
+    c.hMainIcon = icon;
+    c.pszWindowTitle = tr(StrId::AppName);
+    c.pszMainInstruction = tr(StrId::UpdateAskTitle);
+    c.pszContent = tr(StrId::UpdateAskText);
+    c.cButtons = static_cast<UINT>(std::size(buttons));
+    c.pButtons = buttons;
+    c.nDefaultButton = kYes;
+    // Above the snow overlay (topmost) and in front, like the app's other questions.
+    c.pfCallback = [](HWND h, UINT n, WPARAM, LPARAM, LONG_PTR) -> HRESULT {
+        if (n == TDN_CREATED) {
+            SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetForegroundWindow(h);
+        }
+        return S_OK;
+    };
+    int pressed = 0;
+    const HRESULT hr = TaskDialogIndirect(&c, &pressed, nullptr, nullptr);
+    if (icon) DestroyIcon(icon);
+    if (FAILED(hr) || (pressed != kYes && pressed != kNo) || !running_) {
+        SNOW_LOGW("update: the question could not be shown (hr 0x%08lx)", static_cast<unsigned long>(hr));
+        return;
+    }
+    const bool yes = pressed == kYes;
+    Settings s = settings_;
+    s.updates.asked = true;
+    s.updates.check = yes;
+    applySettings(s, false);
+    saveNow();
+    SNOW_LOGI("update: the user %s update checks", yes ? "allowed" : "declined");
+    if (yes) startUpdateCheck(true);
+}
+
+void AppHost::startUpdateCheck(bool manual) {
+    if (!updater_ || updater_->busy() || !running_) return;
+    // Every attempt counts: at most one automatic request a day, also across restarts.
+    Settings s = settings_;
+    s.updates.lastCheckUnix = static_cast<long long>(std::time(nullptr));
+    applySettings(s, false);
+    saveNow();
+    SNOW_LOGI("update: %s check", manual ? "manual" : "automatic");
+    updater_->check();
+}
+
+void AppHost::onUpdateStatus() {
+    if (!updater_) return;
+    const update::Status st = updater_->status();
+    if (st == updStatus_) return;
+    updStatus_ = st;
+    settingsWindow_.setUpdateStatus(st);
+    updateTray();
+}
+
+void AppHost::openUpdatePage(const std::string& url) {
+    if (!update::isAllowedUrl(url)) {
+        SNOW_LOGW("update: release page URL rejected");
+        return;
+    }
+    ShellExecuteW(nullptr, L"open", widen(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    SNOW_LOGI("update: opened the release page in the browser");
 }
 
 // ---- diagnostics ---------------------------------------------------------

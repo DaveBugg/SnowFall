@@ -32,6 +32,7 @@ enum class TrayCommand {
     CallFireworks,     // «Салют!»
     ApplyUserPreset,   // lParam = index into Settings::userPresets
     OpenQuickPanel,    // show the quick panel next to the tray icon
+    OpenUpdate,        // «Доступно обновление …»: settings window on the «О программе» page
 };
 
 // State reflected in the menu (check marks, labels) and tooltip.
@@ -45,6 +46,7 @@ struct TrayState {
     bool leftClickTogglesPause = true;
     std::vector<std::wstring> userPresetNames;   // «Мои пресеты» submenu (index = ApplyUserPreset lParam)
     std::wstring interactionKeys;                // current hold chord, e.g. L"Ctrl+Alt" (quick panel hint)
+    std::wstring updateVersion;                  // newer release available ("0.1.3"); empty = no menu item
 };
 
 class TrayIcon {

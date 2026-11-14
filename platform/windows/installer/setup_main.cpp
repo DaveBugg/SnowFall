@@ -8,6 +8,8 @@
 //   SnowFallSetup.exe                      wizard
 //   SnowFallSetup.exe /S [/D=<dir>]        silent install with defaults
 //       /NOSTARTMENU /DESKTOP /NOAUTOSTART /NOLAUNCH   change the silent defaults
+//   SnowFallSetup.exe /S /UPDATE           silent update started by the app's updater: keeps the
+//       current choices (Start menu / desktop shortcut, autostart) and relaunches the app
 //   SnowFallSetup.exe --uninstall [/S] [/DELSETTINGS] [/D=<dir>]
 // /D= must be the last argument (it may contain spaces, quotes optional).
 // Exit codes: 0 ok, 1 failed, 2 cancelled / bad arguments, 3 the running app did not exit.
@@ -28,6 +30,8 @@
 #include <iterator>
 #include <string>
 #include <thread>
+
+#include "setup_update.h"
 
 namespace {
 
@@ -127,9 +131,9 @@ const Pair kStrings[] = {
     {L"SnowFall не установлен — удалять нечего.", L"SnowFall is not installed — nothing to remove."},
     {L"Не удалось записать файл:\n%s\n\n%s", L"Cannot write the file:\n%s\n\n%s"},
     {L"Прервать установку SnowFall?", L"Cancel SnowFall setup?"},
-    {L"SnowFallSetup.exe [/S] [/NOSTARTMENU] [/DESKTOP] [/NOAUTOSTART] [/NOLAUNCH] [/D=папка]\n"
+    {L"SnowFallSetup.exe [/S] [/UPDATE] [/NOSTARTMENU] [/DESKTOP] [/NOAUTOSTART] [/NOLAUNCH] [/D=папка]\n"
      L"SnowFallSetup.exe --uninstall [/S] [/DELSETTINGS] [/D=папка]",
-     L"SnowFallSetup.exe [/S] [/NOSTARTMENU] [/DESKTOP] [/NOAUTOSTART] [/NOLAUNCH] [/D=folder]\n"
+     L"SnowFallSetup.exe [/S] [/UPDATE] [/NOSTARTMENU] [/DESKTOP] [/NOAUTOSTART] [/NOLAUNCH] [/D=folder]\n"
      L"SnowFallSetup.exe --uninstall [/S] [/DELSETTINGS] [/D=folder]"},
     {L"Найдена предыдущая версия Windows Snow — она будет удалена, настройки сохранятся.",
      L"A previous version (Windows Snow) was found — it will be removed; your settings are kept."},
@@ -441,6 +445,7 @@ struct Options {
     HANDLE waitFor = nullptr;   // relaunched uninstaller: handle of the original process
     bool help = false;
     bool autostartGiven = false;   // /NOAUTOSTART was passed
+    bool update = false;           // /UPDATE: silent, keep the existing choices (setup_update.h)
     // Legacy detection. Hidden test switches /LEGACYKEY= /LEGACYRUN= /LEGACYLINKDIR= /LEGACYDIR=
     // point it at a fake old install so the migration can be tested without touching a real one.
     std::wstring legacyKey = legacy::kUninstName;
@@ -905,6 +910,10 @@ Options parseCommandLine() {
             const std::wstring a = argv[i];
             auto is = [&](const wchar_t* s) { return _wcsicmp(a.c_str(), s) == 0; };
             if (is(L"/S")) o.silent = true;
+            else if (snow::setup::isUpdateSwitch(a.c_str())) {
+                o.update = true;
+                o.silent = true;
+            }
             else if (is(L"--uninstall") || is(L"/uninstall")) o.uninstall = true;
             else if (is(L"/NOSTARTMENU")) o.startMenu = false;
             else if (is(L"/DESKTOP")) o.desktop = true;
@@ -1436,6 +1445,21 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
             std::wstring loc;   // reinstall/update: default to the existing location
             o.dir = regGetString(HKEY_CURRENT_USER, kUninstKey, L"InstallLocation", loc) && !loc.empty() ? loc
                                                                                                          : defaultInstallDir();
+        }
+        if (o.update) {
+            // Started by the app's updater: same as /S, but what the user has now stays as it is.
+            const std::wstring exe = fullPath(o.dir) + L"\\" + kExeName;
+            snow::setup::ExistingInstall now;
+            now.startMenuShortcut = samePath(shortcutTarget(startMenuLink()), exe);
+            now.desktopShortcut = samePath(shortcutTarget(desktopLink()), exe);
+            now.autostart = runValuePointsTo(exe);
+            const snow::setup::InstallChoices keep = snow::setup::keepExistingChoices(now);
+            o.startMenu = keep.startMenu;
+            o.desktop = keep.desktop;
+            o.autostart = keep.autostart;
+            o.autostartGiven = true;   // a legacy Run value must not turn autostart back on
+            logf(L"update mode: keeping start menu %d, desktop %d, autostart %d; relaunch %d", o.startMenu, o.desktop,
+                 o.autostart, o.launch);
         }
         const LegacyInstall legacyInstall = detectLegacy(o);
         if (legacyInstall.found) {

@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,7 @@ using std::min;
 #include "app/ui/theme.h"
 #include "app/ui/tray_icon.h"
 #include "app/ui/ui_util.h"
+#include "update/update.h"
 
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' " \
@@ -59,6 +61,9 @@ struct Demo {
     int fireworksCount = 0;
     int diagCalls = 0;
     int quickChanges = 0;
+    int updateChecks = 0;
+    int updateInstalls = 0;
+    std::vector<std::string> updatePages;   // URLs the window asked the app to open
     std::vector<std::pair<int, LPARAM>> commands;
     std::wstring exeDir;
 };
@@ -127,6 +132,9 @@ SettingsWindowCallbacks makeCallbacks() {
     cb.onClearSnow = [] { ++g_demo->clearCount; };
     cb.onFireworks = [] { ++g_demo->fireworksCount; };
     cb.getDiagnostics = fakeDiagnostics;
+    cb.onCheckUpdates = [] { ++g_demo->updateChecks; };
+    cb.onInstallUpdate = [] { ++g_demo->updateInstalls; };
+    cb.onOpenUpdatePage = [](const std::string& url) { g_demo->updatePages.push_back(url); };
     cb.validateHotkey = [](const std::string& text) -> std::wstring {
         return text == "Ctrl+Alt+F9" ? std::wstring(tr(StrId::HotkeyInUse)) : std::wstring();
     };
@@ -1296,6 +1304,196 @@ void dpiChecks(Tester& t, Demo& d) {
     uitest::setDpiOverride(0);
 }
 
+// ---- updates: fake statuses only (the window never touches the network) ---------------------------
+struct FakeUpdate {
+    const char* tag;
+    update::Status st;
+};
+
+std::vector<FakeUpdate> fakeUpdateStatuses() {
+    using update::Stage;
+    update::Status base;
+    base.current = "0.1.2";
+    auto make = [&](Stage stage, const char* latest, bool canInstall, int progress = 0, const char* error = "") {
+        update::Status s = base;
+        s.stage = stage;
+        s.latest = latest;
+        s.canInstall = canInstall;
+        s.progress = progress;
+        s.error = error;
+        if (*latest) s.pageUrl = std::string("https://github.com/DaveBugg/SnowFall/releases/tag/v") + latest;
+        return s;
+    };
+    return {{"idle", make(Stage::Idle, "", false)},
+            {"checking", make(Stage::Checking, "", false)},
+            {"upToDate", make(Stage::UpToDate, "0.1.2", false)},
+            {"available", make(Stage::Available, "10.20.30", true)},
+            {"manual", make(Stage::Available, "10.20.30", false)},
+            {"downloading", make(Stage::Downloading, "10.20.30", true, 100)},
+            {"installing", make(Stage::Installing, "10.20.30", true, 100)},
+            {"failedVerify", make(Stage::Failed, "10.20.30", true, 0, "verify")},
+            {"failedInstall", make(Stage::Failed, "10.20.30", true, 0, "install")},
+            {"failedNetwork", make(Stage::Failed, "", false, 0, "network")}};
+}
+
+bool shown(HWND window, int id) {
+    HWND c = ctl(window, id);
+    return c && (GetWindowLongPtrW(c, GWL_STYLE) & WS_VISIBLE) != 0;
+}
+
+void updateSuite(Tester& t, Demo& d) {
+    t.line("== updates (About page, header link; fake statuses)");
+    const std::vector<FakeUpdate> states = fakeUpdateStatuses();
+    auto find = [&](const char* tag) -> const update::Status& {
+        for (const FakeUpdate& f : states)
+            if (strcmp(f.tag, tag) == 0) return f.st;
+        return states[0].st;
+    };
+    uitest::setDpiOverride(96);
+    d.settings = Settings{};
+    d.settings.system.language = Language::Russian;
+    d.window.setUpdateStatus(update::Status{});
+    d.window.show(d.settings);
+    HWND w = d.window.hwnd();
+    selectTab(w, kTabCount - 1);
+    pump(d.window, 100);
+
+    t.line("-- toggle and buttons");
+    t.check(!isChecked(w, IDC_UPD_CHECK) && textOf(ctl(w, IDC_UPD_STATUS)) == tr(StrId::UpdateIdle),
+            "checks off by default, status «не проверялись»");
+    t.check(!shown(w, IDC_UPD_INSTALL) && !shown(w, IDC_UPD_PAGE) && !shown(w, IDC_UPD_NOTES) && !shown(w, IDC_UPD_HINT) &&
+                !shown(w, IDC_HDR_UPDATE),
+            "idle: no update actions, no header link");
+    int n = d.changedCount;
+    click(w, IDC_UPD_CHECK);
+    t.check(d.changedCount == n + 1 && d.settings.updates.check && d.settings.updates.asked,
+            "toggle on -> onChanged(updates.check, updates.asked)");
+    click(w, IDC_UPD_CHECK);
+    t.check(!d.settings.updates.check && d.settings.updates.asked, "toggle off keeps asked");
+    Settings pushed = d.settings;
+    pushed.updates.check = true;
+    d.window.update(pushed);
+    t.check(isChecked(w, IDC_UPD_CHECK), "toggle follows update()");
+    d.settings = pushed;
+    SendMessageW(w, uitest::kMsgRestoreDefaultsNoConfirm, 0, 0);
+    t.check(d.settings.updates.check && d.settings.updates.asked, "restore defaults keeps the update answer");
+    const int checks = d.updateChecks;
+    click(w, IDC_UPD_CHECK_NOW);
+    t.check(d.updateChecks == checks + 1, "«Проверить сейчас» -> onCheckUpdates");
+
+    t.line("-- states");
+    d.window.setUpdateStatus(find("checking"));
+    t.check(textOf(ctl(w, IDC_UPD_STATUS)) == tr(StrId::UpdateChecking) && !IsWindowEnabled(ctl(w, IDC_UPD_CHECK_NOW)),
+            "checking: status line, «Проверить сейчас» disabled");
+    d.window.setUpdateStatus(find("upToDate"));
+    t.check(textOf(ctl(w, IDC_UPD_STATUS)) == tr(StrId::UpdateUpToDate) && IsWindowEnabled(ctl(w, IDC_UPD_CHECK_NOW)) &&
+                !shown(w, IDC_HDR_UPDATE),
+            "up to date: status line, button enabled, no header link");
+    d.window.setUpdateStatus(find("available"));
+    pump(d.window, 50);
+    t.check(textOf(ctl(w, IDC_UPD_STATUS)) == format(tr(StrId::UpdateAvailableFmt), L"10.20.30"), "available: status line");
+    t.check(shown(w, IDC_UPD_INSTALL) && shown(w, IDC_UPD_NOTES) && !shown(w, IDC_UPD_PAGE) && !shown(w, IDC_UPD_HINT),
+            "available (installable): «Обновить» + «Что нового»");
+    t.check(shown(w, IDC_HDR_UPDATE) && textOf(ctl(w, IDC_HDR_UPDATE)) == format(tr(StrId::HeaderUpdateFmt), L"10.20.30"),
+            "available: header link with the version");
+    const int installs = d.updateInstalls;
+    click(w, IDC_UPD_INSTALL);
+    t.check(d.updateInstalls == installs + 1, "«Обновить» -> onInstallUpdate");
+    d.updatePages.clear();
+    click(w, IDC_UPD_NOTES);
+    t.check(d.updatePages.size() == 1 && d.updatePages[0] == "https://github.com/DaveBugg/SnowFall/releases/tag/v10.20.30",
+            "«Что нового» -> onOpenUpdatePage(release page)");
+    selectTab(w, 0);
+    pump(d.window, 30);
+    click(w, IDC_HDR_UPDATE);
+    pump(d.window, 30);
+    t.check(isChecked(w, IDC_NAV_FIRST + kTabCount - 1) && IsWindowVisible(GetParent(ctl(w, IDC_UPD_STATUS))),
+            "header link opens «О программе»");
+    {
+        // The link sits on the title line, clear of the tool / theme chips.
+        RECT link{}, tool{};
+        GetWindowRect(ctl(w, IDC_HDR_UPDATE), &link);
+        GetWindowRect(ctl(w, IDC_HDR_TOOL_SNOWBALL), &tool);
+        t.check(link.right < tool.left - 40, "header link does not overlap the header chips");
+    }
+    captureWindow(w, d.exeDir + L"\\settings_night_about_update.png");
+    d.window.setUpdateStatus(find("manual"));
+    t.check(!shown(w, IDC_UPD_INSTALL) && shown(w, IDC_UPD_PAGE) && shown(w, IDC_UPD_HINT) && shown(w, IDC_UPD_NOTES) &&
+                textOf(ctl(w, IDC_UPD_HINT)) == tr(StrId::UpdateManualHint),
+            "available (portable): hint + «Страница загрузки» + «Что нового»");
+    d.updatePages.clear();
+    click(w, IDC_UPD_PAGE);
+    t.check(d.updatePages.size() == 1 && d.updatePages[0].find("/releases/tag/v10.20.30") != std::string::npos,
+            "«Страница загрузки» -> onOpenUpdatePage(release page)");
+    const int installs2 = d.updateInstalls;
+    SendMessageW(GetParent(ctl(w, IDC_UPD_INSTALL)), WM_COMMAND, MAKEWPARAM(IDC_UPD_INSTALL, BN_CLICKED),
+                 reinterpret_cast<LPARAM>(ctl(w, IDC_UPD_INSTALL)));
+    t.check(d.updateInstalls == installs2, "no install for a copy that cannot be updated");
+    d.window.setUpdateStatus(find("downloading"));
+    t.check(textOf(ctl(w, IDC_UPD_STATUS)) == format(tr(StrId::UpdateDownloadingFmt), 100) && !shown(w, IDC_UPD_INSTALL) &&
+                !shown(w, IDC_HDR_UPDATE) && !IsWindowEnabled(ctl(w, IDC_UPD_CHECK_NOW)),
+            "downloading: progress in the status line, no actions");
+    d.window.setUpdateStatus(find("installing"));
+    t.check(textOf(ctl(w, IDC_UPD_STATUS)) == tr(StrId::UpdateInstalling), "installing: status line");
+    d.window.setUpdateStatus(find("failedVerify"));
+    t.check(textOf(ctl(w, IDC_UPD_STATUS)) == format(tr(StrId::UpdateFailedFmt), tr(StrId::UpdateErrVerify)) &&
+                shown(w, IDC_UPD_PAGE) && !shown(w, IDC_UPD_INSTALL),
+            "signature check failed: reason + release page only");
+    d.window.setUpdateStatus(find("failedNetwork"));
+    t.check(textOf(ctl(w, IDC_UPD_STATUS)) == format(tr(StrId::UpdateFailedFmt), tr(StrId::UpdateErrNetwork)) &&
+                !shown(w, IDC_UPD_PAGE),
+            "network failure: reason, no actions");
+    d.window.close();
+    d.window.setUpdateStatus(find("available"));
+    d.window.show(d.settings);
+    w = d.window.hwnd();
+    t.check(shown(w, IDC_HDR_UPDATE) && shown(w, IDC_UPD_INSTALL), "status set while closed is shown when the window opens");
+    d.window.close();
+    d.window.showAbout(d.settings);
+    w = d.window.hwnd();
+    pump(d.window, 50);
+    t.check(w && isChecked(w, IDC_NAV_FIRST + kTabCount - 1) && IsWindowVisible(GetParent(ctl(w, IDC_UPD_STATUS))),
+            "showAbout() opens on «О программе»");
+    d.window.close();
+
+    t.line("-- no clipped text: every state, 3 themes, RU + EN, 96 / 120 / 144 DPI");
+    for (UINT dpi : {96u, 120u, 144u}) {
+        uitest::setDpiOverride(dpi);
+        for (int theme = 0; theme < 3; ++theme) {
+            int problems = 0;
+            for (Language lang : {Language::Russian, Language::English}) {
+                d.settings = Settings{};
+                d.settings.system.language = lang;
+                d.settings.system.uiTheme = static_cast<UiTheme>(theme);
+                d.window.setUpdateStatus(update::Status{});
+                d.window.show(d.settings);
+                HWND win = d.window.hwnd();
+                selectTab(win, kTabCount - 1);
+                pump(d.window, 60);
+                char tag[64];
+                for (const FakeUpdate& f : states) {
+                    d.window.setUpdateStatus(f.st);
+                    pump(d.window, 15);
+                    snprintf(tag, sizeof(tag), "%s@%u %s", lang == Language::Russian ? "ru" : "en", dpi, f.tag);
+                    problems += checkClipping(t, win, tag);
+                }
+                if (dpi == 144 || (dpi == 96 && lang == Language::English)) {
+                    d.window.setUpdateStatus(find("manual"));
+                    pump(d.window, 120);
+                    captureWindow(win, d.exeDir + L"\\settings_" + kThemeTag[theme] + L"_about_update_" +
+                                           (lang == Language::Russian ? L"ru" : L"en") + L"_dpi" + std::to_wstring(dpi) + L".png");
+                }
+                d.window.close();
+            }
+            char what[96];
+            snprintf(what, sizeof(what), "no clipped text in update states at %u DPI (%s)", dpi, narrow(kThemeTag[theme]).c_str());
+            t.check(problems == 0, what);
+        }
+    }
+    uitest::setDpiOverride(0);
+    d.window.setUpdateStatus(update::Status{});
+}
+
 int runSelfTest(HINSTANCE inst, Demo& d) {
     Tester t;
     t.out = _wfopen((d.exeDir + L"\\ui_selftest.txt").c_str(), L"w");
@@ -1334,6 +1532,7 @@ int runSelfTest(HINSTANCE inst, Demo& d) {
     for (int theme = 0; theme < 3; ++theme) settingsSuite(t, d, static_cast<UiTheme>(theme));
     themeAndPreviewChecks(t, d);
     dpiChecks(t, d);
+    updateSuite(t, d);
 
     DestroyWindow(owner);
     t.line("checks: %d, failures: %d", t.checks, t.failures);

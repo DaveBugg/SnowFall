@@ -19,6 +19,7 @@
 #include "tracker/window_tracker.h"
 #include "rendering/d3d11/overlay_system.h"
 #include "settings/settings_store.h"
+#include "update/updater_win.h"
 
 namespace snow {
 
@@ -47,8 +48,9 @@ private:
         kMsgTray = WM_APP + 100,
         kMsgRenderFailed = WM_APP + 101,
         kMsgCycleTool = WM_APP + 102,
+        kMsgUpdate = WM_APP + 103,   // the updater's worker changed update::Status
     };
-    enum : UINT_PTR { kTimerSave = 2 };
+    enum : UINT_PTR { kTimerSave = 2, kTimerUpdateAsk = 3, kTimerUpdateCheck = 4 };
     enum : int { kHotkeyPause = 1, kHotkeyClear = 2, kHotkeyInteraction = 3, kHotkeyProbe = 99 };
 
     static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -79,6 +81,13 @@ private:
     const wchar_t* tx(const wchar_t* ru, const wchar_t* en) const { return russian_ ? ru : en; }
     void applyLanguage();
 
+    // Updates (GitHub Releases, update/updater_win.h).
+    void initUpdates(const LaunchOptions& options);
+    void askAboutUpdates();              // the one-time question «Проверять обновления?»
+    void startUpdateCheck(bool manual);  // records updates.lastCheckUnix, then one request
+    void onUpdateStatus();               // kMsgUpdate (UI thread)
+    void openUpdatePage(const std::string& url);
+
     HINSTANCE instance_ = nullptr;
     HWND hwnd_ = nullptr;
     bool running_ = false;
@@ -108,6 +117,9 @@ private:
     bool decisionValid_ = false;
     bool sessionNotify_ = false;
     bool hotkeyRegistered_[4] = {};
+
+    std::unique_ptr<update::Updater> updater_;
+    update::Status updStatus_;
 };
 
 }  // namespace snow

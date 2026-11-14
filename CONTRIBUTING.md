@@ -10,7 +10,8 @@ Thanks for your interest! Bug reports, ideas and pull requests are welcome.
 
 ## Ground rules (they are product requirements, not style preferences)
 
-- No network access, no telemetry.
+- No telemetry. The only network code is the opt-in update check (core/update); nothing about
+  the user or the machine may ever be sent.
 - Never read other applications' window contents, titles or pixels (tests may read pixels only
   inside their own test windows). Never log personal data.
 - No drivers, DLL injection, services or elevation.

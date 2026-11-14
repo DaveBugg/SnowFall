@@ -18,6 +18,8 @@ target_link_libraries(snow_settings_win PUBLIC snow_settings snow_diag)
 snow_module(snow_win32        "${SNOW_WIN_DIR}" tracker)
 snow_module(snow_render       "${SNOW_WIN_DIR}" rendering/d3d11)
 snow_module(snow_ui           "${SNOW_WIN_DIR}" app/ui)
+snow_module(snow_update_win   "${SNOW_WIN_DIR}" update)              # update check: WinHTTP + CNG
+target_link_libraries(snow_update_win PUBLIC snow_settings snow_diag winhttp bcrypt advapi32)
 foreach(lib snow_win32 snow_render snow_ui)
   target_link_libraries(${lib} PUBLIC snow_sim snow_settings snow_diag)
 endforeach()
@@ -27,15 +29,15 @@ file(GLOB app_srcs CONFIGURE_DEPENDS "${SNOW_WIN_DIR}/app/*.cpp" "${SNOW_WIN_DIR
                                      "${SNOW_WIN_DIR}/app/*.rc" "${SNOW_WIN_DIR}/app/*.manifest")
 add_executable(SnowFall WIN32 ${app_srcs})
 target_include_directories(SnowFall PRIVATE "${SNOW_WIN_DIR}")
-target_link_libraries(SnowFall PRIVATE snow_ui snow_render snow_win32 snow_sim snow_settings_win snow_settings
-                                       snow_diag ${SNOW_WIN_LIBS})
+target_link_libraries(SnowFall PRIVATE snow_ui snow_render snow_win32 snow_sim snow_settings_win snow_update_win
+                                       snow_settings snow_diag ${SNOW_WIN_LIBS})
 
 # ---- tests and tools -------------------------------------------------------
 function(snow_win_exe name dir)
   snow_exe(${name} "${SNOW_WIN_DIR}/${dir}" ${ARGN})
   target_include_directories(${name} PRIVATE "${SNOW_WIN_DIR}")
 endfunction()
-snow_win_exe(snow_settings_win_tests tests/unit/settings      snow_settings_win advapi32 shell32 ole32)
+snow_win_exe(snow_settings_win_tests tests/unit/settings      snow_settings_win snow_update_win advapi32 shell32 ole32)
 snow_win_exe(tracker_dump            tests/integration/tracker snow_win32 ${SNOW_WIN_LIBS})
 snow_win_exe(render_demo             tests/integration/render  snow_render ${SNOW_WIN_LIBS})
 snow_win_exe(e2e_smoke               tests/integration/e2e     snow_settings_win ${SNOW_WIN_LIBS})

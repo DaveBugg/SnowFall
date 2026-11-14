@@ -11,6 +11,7 @@
 #include <string>
 
 #include "core/settings.h"
+#include "update/update.h"
 
 namespace snow {
 
@@ -43,6 +44,11 @@ struct SettingsWindowCallbacks {
     // used to warn about conflicts right in the UI.
     std::function<std::wstring(const std::string& hotkeyText)> validateHotkey;
     std::function<void()> onFireworks;                    // «Салют!» (launch fireworks now)
+    // Updates («О программе»): «Проверить сейчас», «Обновить», and the release page (opened by the
+    // app in the browser; `url` is the release page of update::Status).
+    std::function<void()> onCheckUpdates;
+    std::function<void()> onInstallUpdate;
+    std::function<void(const std::string& url)> onOpenUpdatePage;
 };
 
 class SettingsWindow {
@@ -62,6 +68,12 @@ public:
 
     // Push externally changed settings (tray/hotkeys) into the open window's controls.
     void update(const Settings& current);
+
+    // Update check state shown on «О программе» and in the header (kept while the window is
+    // closed). Status::error is a reason code: "network", "verify" or "install".
+    void setUpdateStatus(const update::Status& status);
+    // show() + switch to the «О программе» page (tray item / header link of an update).
+    void showAbout(const Settings& current);
 
     // Call from the message loop before TranslateMessage: handles Tab/keyboard navigation.
     bool preTranslateMessage(MSG* msg);
