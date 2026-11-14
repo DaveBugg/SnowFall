@@ -599,6 +599,7 @@ struct AboutPage: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(t["AppName"]).font(.system(size: 24, weight: .semibold, design: .rounded)).foregroundColor(p.heading.c)
+                            .lineLimit(1).fixedSize()   // never wraps when the scroll bar narrows the page
                         Text(t["PoweredBy"]).font(.system(size: UIMetrics.font)).foregroundColor(p.textSecondary.c)
                             .fixedSize()
                     }
