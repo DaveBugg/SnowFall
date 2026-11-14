@@ -229,6 +229,11 @@ json::Value toTree(const Settings& s) {
         entry.set("driftOpacityPercent", up.driftOpacityPercent);
     }
 
+    Value& up = root.set("updates", Value::object());
+    up.set("check", s.updates.check);
+    up.set("asked", s.updates.asked);
+    up.set("lastCheck", static_cast<double>(s.updates.lastCheckUnix));
+
     Value& privacy = root.set("privacy", Value::object());
     privacy.set("telemetry", s.privacy.telemetry);
     return root;
@@ -314,6 +319,13 @@ void fromTree(const json::Value& root, Settings& s) {
             readInt(e, "driftOpacityPercent", up.driftOpacityPercent);
             s.userPresets.push_back(std::move(up));
         }
+    }
+    if (const json::Value* u = section(root, "updates")) {
+        readBool(*u, "check", s.updates.check);
+        readBool(*u, "asked", s.updates.asked);
+        if (const json::Value* v = u->find("lastCheck"); v && v->isNumber() && std::isfinite(v->asNumber()) &&
+            v->asNumber() >= 0 && v->asNumber() < 1e13)
+            s.updates.lastCheckUnix = static_cast<long long>(v->asNumber());
     }
     // "privacy.telemetry" is deliberately not read: it is always false.
 }

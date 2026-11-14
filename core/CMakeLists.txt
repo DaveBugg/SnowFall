@@ -1,14 +1,15 @@
 # Portable core of SnowFall — no OS headers allowed in here (see docs/architecture.md).
 #
 #   snow_sim       simulation + surfaces + interaction (World facade, physics, tools, snowmen)
-#   snow_settings  settings model, JSON mapping, migrations, sanitize(), hotkey grammar
+#   snow_settings  settings model, JSON mapping, migrations, sanitize(), hotkey grammar,
+#                  update check logic (core/update: versions, release JSON, checksums; no networking)
 #                  (SettingsStore file I/O is implemented by the platform layer)
 #   snow_diag      logger backend: portable stderr version here on non-Windows;
 #                  Windows (platform/windows/diagnostics) and macOS (platform/macos/diagnostics,
 #                  SNOW_PLATFORM_DIAG) provide their own
 
 snow_module(snow_sim      "${CMAKE_CURRENT_SOURCE_DIR}" core simulation surfaces interaction runtime i18n)
-snow_module(snow_settings "${CMAKE_CURRENT_SOURCE_DIR}" settings)
+snow_module(snow_settings "${CMAKE_CURRENT_SOURCE_DIR}" settings update)
 
 if(NOT WIN32 AND NOT SNOW_PLATFORM_DIAG)
   add_library(snow_diag STATIC diagnostics/log_portable.cpp diagnostics/log.h)

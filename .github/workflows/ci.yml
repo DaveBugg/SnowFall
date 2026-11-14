@@ -102,6 +102,27 @@ jobs:
           path: dist-mac
       # macOS: ship the dmg only (the app zip is for CI testing).
       - run: cp dist-mac/*.dmg dist/ && ls -la dist
+      # Checksums of every asset, signed with the release key (ECDSA P-256 / SHA-256, DER). The
+      # in-app updater installs only files listed in a correctly signed SHA256SUMS
+      # (core/update/update.h); without the secret the release gets no .sig and the app offers
+      # the download page instead.
+      - name: Checksums and signature
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          cd dist
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+          if [ -n "$RELEASE_SIGNING_KEY" ]; then
+            umask 077
+            printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/release-key.pem"
+            openssl dgst -sha256 -sign "$RUNNER_TEMP/release-key.pem" -out SHA256SUMS.sig SHA256SUMS
+            openssl ec -in "$RUNNER_TEMP/release-key.pem" -pubout -out "$RUNNER_TEMP/release-pub.pem"
+            openssl dgst -sha256 -verify "$RUNNER_TEMP/release-pub.pem" -signature SHA256SUMS.sig SHA256SUMS
+            rm -f "$RUNNER_TEMP/release-key.pem"
+          else
+            echo "::warning::RELEASE_SIGNING_KEY is not set: no SHA256SUMS.sig, in-app updates will offer the download page only"
+          fi
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*

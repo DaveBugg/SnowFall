@@ -267,10 +267,12 @@ X(AboutDescription,
   L"the taskbar, and drifts can be rolled into snowballs and snowmen.")
 X(GroupPrivacy, L"Конфиденциальность", L"Privacy")
 X(AboutPrivacy,
-  L"Программа не обращается к сети и не отправляет телеметрию. Она не читает содержимое окон, не делает "
-  L"снимков экрана и использует только положение и размеры окон.",
-  L"The program never uses the network and sends no telemetry. It does not read window contents or take "
-  L"screenshots; it only uses window positions and sizes.")
+  L"Никакой телеметрии и данных о вас. В сеть программа обращается только для проверки обновлений, если вы "
+  L"это разрешили: один запрос к GitHub в сутки. Она не читает содержимое окон, не делает снимков экрана и "
+  L"использует только положение и размеры окон.",
+  L"No telemetry and no data about you. The program goes online only to check for updates, if you allowed "
+  L"it: one request to GitHub a day. It does not read window contents or take screenshots; it only uses "
+  L"window positions and sizes.")
 X(GroupLog, L"Журнал", L"Log")
 X(LblLogFile, L"Файл журнала:", L"Log file:")
 X(BtnOpenLogFolder, L"Открыть папку журнала", L"Open log folder")
@@ -279,6 +281,33 @@ X(AboutLicence,
   L"со схожими эффектами, не использует их код и графику; все изображения создаются программно.",
   L"SnowFall is an independent implementation. It is not affiliated with other products that offer "
   L"similar effects and uses none of their code or artwork; all images are generated procedurally.")
+
+// ---- updates (GitHub Releases, core/update/update.h) ---------------------------------------
+X(UpdateAskTitle, L"Проверять обновления?", L"Check for updates?")
+X(UpdateAskText, L"Один запрос для проверки актуальной версии в сутки, без данных о вас.",
+  L"One request a day to check for the latest version, no data about you.")
+X(BtnUpdateAskYes, L"Проверять", L"Check")
+X(BtnUpdateAskNo, L"Не проверять", L"Don't check")
+X(GroupUpdates, L"Обновления", L"Updates")
+X(ChkCheckUpdates, L"Проверять обновления (раз в сутки)", L"Check for updates (once a day)")
+X(BtnCheckUpdates, L"Проверить сейчас", L"Check now")
+X(UpdateIdle, L"Обновления не проверялись", L"Not checked yet")
+X(UpdateChecking, L"Проверка обновлений…", L"Checking for updates…")
+X(UpdateUpToDate, L"Установлена последняя версия", L"You have the latest version")
+X(UpdateAvailableFmt, L"Доступна версия %ls", L"Version %ls is available")
+X(UpdateDownloadingFmt, L"Загрузка обновления… %d%%", L"Downloading the update… %d%%")
+X(UpdateInstalling, L"Установка обновления…", L"Installing the update…")
+X(UpdateFailedFmt, L"Не удалось: %ls", L"Failed: %ls")
+X(UpdateErrNetwork, L"нет связи с GitHub", L"cannot reach GitHub")
+X(UpdateErrVerify, L"файл обновления не прошёл проверку подписи", L"the update failed the signature check")
+X(UpdateErrInstall, L"не удалось установить обновление", L"the update could not be installed")
+X(UpdateManualHint, L"Это обновление устанавливается вручную со страницы загрузки.",
+  L"This update is installed manually from the download page.")
+X(BtnUpdateInstall, L"Обновить", L"Update")
+X(BtnOpenReleasePage, L"Страница загрузки", L"Download page")
+X(BtnWhatsNew, L"Что нового", L"What's new")
+X(HeaderUpdateFmt, L"Доступна версия %ls", L"Version %ls available")
+X(MenuUpdateAvailableFmt, L"Доступно обновление %ls…", L"Update %ls available…")
 
 // ---- macOS variants (the macOS UI prefers <Id>Mac when it exists; Windows never uses them) ----
 X(MenuAutostartMac, L"Открывать при входе в систему", L"Open at login")

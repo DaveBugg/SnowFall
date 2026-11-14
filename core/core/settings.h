@@ -136,6 +136,15 @@ struct UserPreset {
     bool operator==(const UserPreset&) const = default;
 };
 
+// Update check against GitHub Releases (core/update/update.h). Off until the user answers the
+// one-time question «Проверять обновления?». json: "updates"
+struct UpdateSettings {
+    bool check = false;              // at most one request a day, nothing about the user is sent
+    bool asked = false;              // the one-time question was answered
+    long long lastCheckUnix = 0;     // last automatic or manual check (seconds since 1970, UTC)
+    bool operator==(const UpdateSettings&) const = default;
+};
+
 struct PrivacySettings {
     bool telemetry = false;              // always false: the app never sends anything
     bool operator==(const PrivacySettings&) const = default;
@@ -153,6 +162,7 @@ struct Settings {
     SystemSettings system;
     FestiveSettings festive;
     std::vector<UserPreset> userPresets; // at most 20
+    UpdateSettings updates;
     PrivacySettings privacy;
     bool operator==(const Settings&) const = default;
 };

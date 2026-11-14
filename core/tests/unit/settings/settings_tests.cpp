@@ -109,7 +109,7 @@ TEST(settings_json_key_names) {
     };
     CHECK(keys(nullptr) ==
           "schemaVersion,enabled,startupWithWindows,weather,accumulation,interaction,performance,hotkeys,system,"
-          "festive,userPresets,privacy");
+          "festive,userPresets,updates,privacy");
     CHECK(keys("festive") == "garland,fireworks");
     CHECK(root.find("userPresets")->isArray() && root.find("userPresets")->size() == 0);
     CHECK(keys("weather") == "preset,intensity,wind,gustiness,sizePercent,fallSpeedPercent,opacityPercent,skyPerMonitor");
@@ -123,6 +123,7 @@ TEST(settings_json_key_names) {
     CHECK(keys("hotkeys") == "pauseToggle,clearSnow,interactionToggle");
     CHECK(keys("system") == "language,uiTheme,trayLeftClickTogglesPause,excludedProcesses,excludedSnowMode");
     CHECK(keys("privacy") == "telemetry");
+    CHECK(keys("updates") == "check,asked,lastCheck");
     CHECK(root.find("schemaVersion")->asNumber() == kSettingsSchemaVersion);
     CHECK(root.find("system")->find("excludedProcesses")->isArray());
     CHECK(root.find("privacy")->find("telemetry")->isBool());
