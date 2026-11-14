@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 — 2026-11-14
+
+- First release delivered through the in-app updater: 0.1.3 finds it, verifies the signed
+  `SHA256SUMS` and installs it. No functional changes otherwise.
+
 ## 0.1.3 — 2026-11-14
 
 - **Updates from GitHub Releases (Windows and macOS), opt-in.** On first start the app asks once

@@ -1,5 +1,5 @@
 @echo off
-rem Builds an UNSIGNED MSIX package: dist\SnowFall-0.1.3-x64.msix
+rem Builds an UNSIGNED MSIX package: dist\SnowFall-0.1.4-x64.msix
 rem   packaging\make_msix.bat [build-dir]        (default build dir: build)
 rem   set SNOW_EXE=<path\SnowFall.exe> to package a prebuilt exe instead of building it.
 rem Signing is a separate, manual step: see packaging\README.md. This script never creates
@@ -8,7 +8,7 @@ setlocal
 set "ROOT=%~dp0..\..\.."
 set "BDIR=%~1"
 if "%BDIR%"=="" set "BDIR=build"
-set "VER=0.1.3"
+set "VER=0.1.4"
 
 if "%SNOW_EXE%"=="" (
   call "%ROOT%\build.bat" "%BDIR%" Release SnowFall snow_art || exit /b 1
