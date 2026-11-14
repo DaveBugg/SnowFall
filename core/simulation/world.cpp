@@ -1128,6 +1128,7 @@ void World::buildSnapshot(FrameSnapshot& out) const {
             sp.halfH = 1.4f * p.radius;
             sp.rotation = 0;
         }
+        if (sp.opacity <= 0.0f) continue;   // e.g. not yet inside its own monitor (sky per monitor)
         out.particles.sprites.push_back(sp);
     }
     d.icicles.appendFalling(out.particles.sprites, flakeOpacity);

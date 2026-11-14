@@ -596,7 +596,10 @@ TEST(snapshot_is_complete_and_reusable) {
     w.buildSnapshot(snap);
     CHECK(snap.frame == 77);   // left to the caller
     CHECK(snap.drifts.size() == 2);
-    CHECK(snap.particles.sprites.size() == w.particleCount() && snap.particles.clip.empty());
+    // Every flake except those still entering their monitor through its top edge (sky per
+    // monitor: invisible until fully inside, see ParticleSystem::edgeFade).
+    CHECK(snap.particles.sprites.size() <= w.particleCount() && snap.particles.sprites.size() * 10 >= w.particleCount() * 9 &&
+          snap.particles.clip.empty());
     CHECK(snap.stats.particles == w.particleCount() && snap.stats.surfaces == 2);
     CHECK(snap.hitRegions.empty() && snap.cursor.sprites.empty() && snap.objects.empty());
     bool variants[kFlakeVariants]{};

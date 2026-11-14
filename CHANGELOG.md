@@ -9,6 +9,8 @@
 - Log: compact by default (256 KB + one previous file), «Detailed log» toggle on the
   Performance page (debug records, 2 MB); only the 5 newest crash reports are kept.
 - Builds made from a commit other than the release tag show the version as `0.1.2+<commit>`.
+- Fix: with monitors stacked vertically, flakes of the lower monitor flickered for a moment
+  under the taskbar of the upper one (they started a few pixels above their own monitor).
 - Windows: the simulation thread is now shared with the macOS port (no behaviour change intended).
 
 ## 0.1.1 — 2026-11-12

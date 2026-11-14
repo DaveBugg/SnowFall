@@ -30,13 +30,18 @@ TEST(sim_runner_publishes_and_stops) {
     std::this_thread::sleep_for(600ms);
     auto a = ex.latest();
     CHECK(a != nullptr);
+    const auto tRate = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(500ms);
     auto b = ex.latest();
+    // CI VMs oversleep (a 500 ms sleep can take a second or more): judge the rate by the real time.
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - tRate).count();
     CHECK(b != nullptr);
     if (a && b) {
         const auto frames = b->frame - a->frame;
-        printf("  frames in 0.5 s: %llu, particles %u\n", static_cast<unsigned long long>(frames), b->stats.particles);
-        CHECK(frames >= 5 && frames <= 45);    // ~30 at 60 Hz; CI VMs can stall for hundreds of ms
+        printf("  frames in %.2f s: %llu, particles %u\n", elapsed, static_cast<unsigned long long>(frames),
+               b->stats.particles);
+        // ~60 per second; CI VMs can stall the thread for hundreds of ms, but it never runs faster.
+        CHECK(frames >= 5 && static_cast<double>(frames) <= 60.0 * elapsed * 1.25 + 6.0);
         CHECK(b->stats.particles > 0);
     }
     CHECK(cursorCalls > 10);

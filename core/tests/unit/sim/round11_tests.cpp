@@ -38,15 +38,19 @@ TEST(sky_per_monitor_snows_on_a_lower_monitor_and_never_crosses) {
     w.applySettings(quiet(true), RuntimeTuning{});
     w.setLayout(stacked());
     auto in = WorldTestAccess::get(w);
-    int crossings = 0;
+    int crossings = 0, shownAbove = 0;
     for (int k = 0; k < 1500; ++k) {
         w.step(1.0f / 60.0f);
         for (const Particle& p : in.particles.particles()) {
             if (p.home == 255) continue;
             const RectI r = p.home == 0 ? RectI{0, 0, 1920, 1080} : RectI{0, 1080, 1920, 2160};
             if (p.x < r.l - 1.5f || p.x > r.r + 1.5f || p.y > r.b + 1.5f) ++crossings;
+            // Regression: lower-monitor flakes used to start 8 px above its top, i.e. flickering
+            // over the bottom of the upper monitor (under its taskbar) for a few frames.
+            if (p.y - 2.0f * p.radius < static_cast<float>(r.t) && in.particles.edgeFade(p) > 0.0f) ++shownAbove;
         }
     }
+    CHECK(shownAbove == 0);
     const int lower = countIn(w, 1080, 2160);
     const double bar2 = surfaceOf(w, 2)->hm.mass();
     printf("  stacked, sky per monitor: %d flakes on the lower monitor, lower taskbar %.0f px^2, crossings %d\n", lower, bar2,

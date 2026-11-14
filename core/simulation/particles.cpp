@@ -76,8 +76,12 @@ int ParticleSystem::skyTarget(std::size_t monitor) const {
 float ParticleSystem::edgeFade(const Particle& p) const {
     if (!perMonitor_ || p.home >= skies_.size()) return 1.0f;
     const RectI& r = skies_[p.home].r;
+    // Top edge: invisible until the whole sprite is inside its own monitor. A flake of the lower
+    // of two stacked monitors must never show over the bottom strip (taskbar) of the upper one.
+    const float top = (p.y - static_cast<float>(r.t) - 2.0f * p.radius) / kEdgeFadePx;
+    if (top <= 0.0f) return 0.0f;
     const float d = std::min({p.x - static_cast<float>(r.l), static_cast<float>(r.r) - p.x, static_cast<float>(r.b) - p.y});
-    return std::clamp(d / kEdgeFadePx, 0.05f, 1.0f);
+    return std::min(std::clamp(d / kEdgeFadePx, 0.05f, 1.0f), std::min(top, 1.0f));
 }
 
 void ParticleSystem::clear() {
@@ -132,7 +136,9 @@ Particle* ParticleSystem::spawnAmbient(const Weather& weather, int sky) {
         p.y = T + rng_.uniform() * H;
     } else {
         p.x = sky >= 0 ? L + rng_.uniform() * W : L - 24.0f + rng_.uniform() * (W + 48.0f);
-        p.y = T - 8.0f;
+        // Own sky: start ON the monitor's top edge (faded in by edgeFade), never above it: above
+        // is the neighbouring monitor when monitors are stacked.
+        p.y = sky >= 0 ? T : T - 8.0f;
     }
     if (sky >= 0) {
         p.home = static_cast<std::uint8_t>(sky);

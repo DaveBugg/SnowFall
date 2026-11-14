@@ -58,7 +58,8 @@ public:
     void setSkyPerMonitor(bool on) { perMonitor_ = on; }
     bool skyPerMonitor() const { return perMonitor_; }
     inline static constexpr float kEdgeFadePx = 6.0f;
-    // Opacity factor of a flake near its home monitor's edges (1 = fully visible).
+    // Opacity factor of a flake near its home monitor's edges (1 = fully visible; 0 while any
+    // part of it is above its monitor's top edge).
     float edgeFade(const Particle& p) const;
     int skyCount(std::size_t monitor) const { return monitor < skies_.size() ? skies_[monitor].count : 0; }
     int skyTarget(std::size_t monitor) const;
