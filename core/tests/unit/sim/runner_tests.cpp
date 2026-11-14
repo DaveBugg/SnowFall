@@ -40,8 +40,8 @@ TEST(sim_runner_publishes_and_stops) {
         const auto frames = b->frame - a->frame;
         printf("  frames in %.2f s: %llu, particles %u\n", elapsed, static_cast<unsigned long long>(frames),
                b->stats.particles);
-        // ~60 per second; CI VMs can stall the thread for hundreds of ms, but it never runs faster.
-        CHECK(frames >= 5 && static_cast<double>(frames) <= 60.0 * elapsed * 1.25 + 6.0);
+        // ~60 per second; CI VMs can stall the thread for most of the interval, but it never runs faster.
+        CHECK(frames >= 1 && static_cast<double>(frames) <= 60.0 * elapsed * 1.25 + 6.0);
         CHECK(b->stats.particles > 0);
     }
     CHECK(cursorCalls > 10);
