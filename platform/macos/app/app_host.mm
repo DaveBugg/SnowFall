@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 
 #include "app/app_actions.h"
 #include "app/strings_mac.h"
+#include "app/updater.h"
 #include "core/skins.h"
 #include "diagnostics/log.h"
 #include "settings/hotkey.h"
@@ -126,8 +128,121 @@ bool AppHost::initialize(const LaunchOptions& options) {
     if (!renderOk_) showRenderFailure(renderError);
     if (options.openSettings) openSettings();
     else if (options.firstRun && !options.customDataDir && !quiet_) showFirstRunWelcome();
+    startUpdates(options);
     SNOW_LOGI("started, version %s", SNOW_VERSION);
     return true;
+}
+
+// ---- updates -----------------------------------------------------------------------------------
+// One-time question a few seconds after start (never over another modal dialog), then an
+// automatic check kStartupDelaySeconds after start, re-evaluated hourly, only while the user
+// agreed (settings.updates.check). The self-test (quiet) never touches the network.
+
+void AppHost::startUpdates(const LaunchOptions& options) {
+    const bool network = !quiet_;
+    updater_ = [[SFUpdater alloc] initWithNetworkAllowed:network];
+    AppHost* self = this;
+    updater_.onStatus = ^{
+      self->onUpdateStatus();
+    };
+    updater_.onCheckAttempt = ^{
+      self->settings_.updates.lastCheckUnix = static_cast<long long>(std::time(nullptr));
+      self->pushSettingsToUi(false);
+      if (self->running_) self->scheduleSave();
+    };
+    updater_.onReadyToQuit = ^{
+      self->quit();
+    };
+    updateBlocker_ = [updater_ installBlocker];
+    const long long last = settings_.updates.lastCheckUnix;
+    const long long now = static_cast<long long>(std::time(nullptr));
+    const std::string lastText = last > 0 ? std::to_string((now - last) / 3600) + " h ago" : std::string("never");
+    SNOW_LOGI("updates: automatic check %s, asked %s, last check %s, in-place install %s",
+              settings_.updates.check ? "on" : "off", settings_.updates.asked ? "yes" : "no", lastText.c_str(),
+              updateBlocker_.empty() ? "possible" : updateBlocker_.c_str());
+    if (!network) {
+        SNOW_LOGI("updates: network disabled in this run");
+        return;
+    }
+    [updater_ cleanUpPreviousRun];
+    if (!settings_.updates.asked && !options.customDataDir) scheduleUpdateQuestion(4.0);
+    updateFirstCheckTimer_ = [NSTimer scheduledTimerWithTimeInterval:update::kStartupDelaySeconds
+                                                             repeats:NO
+                                                               block:^(NSTimer*) {
+                                                                 self->updateFirstCheckTimer_ = nil;
+                                                                 self->maybeAutoCheck();
+                                                               }];
+    updateHourlyTimer_ = [NSTimer scheduledTimerWithTimeInterval:3600
+                                                         repeats:YES
+                                                           block:^(NSTimer*) {
+                                                             self->maybeAutoCheck();
+                                                           }];
+    updateHourlyTimer_.tolerance = 60;
+}
+
+void AppHost::scheduleUpdateQuestion(double delaySeconds) {
+    [updateAskTimer_ invalidate];
+    AppHost* self = this;
+    // Default run-loop mode: the timer does not fire while a modal alert (welcome, Accessibility)
+    // runs; askAboutUpdates() re-checks anyway.
+    updateAskTimer_ = [NSTimer scheduledTimerWithTimeInterval:delaySeconds
+                                                      repeats:NO
+                                                        block:^(NSTimer*) {
+                                                          self->updateAskTimer_ = nil;
+                                                          self->askAboutUpdates();
+                                                        }];
+}
+
+void AppHost::askAboutUpdates() {
+    if (!running_ || quiet_ || settings_.updates.asked) return;
+    if (NSApp.modalWindow != nil || interaction_.active() || inputs_.fullscreenApp) {
+        scheduleUpdateQuestion(15.0);   // later: never over another dialog, a fullscreen app or snow play
+        return;
+    }
+    CursorHider::show();   // never run a dialog with a hidden cursor
+    NSAlert* a = [NSAlert new];
+    a.messageText = tr(Str::UpdateAskTitle);
+    a.informativeText = tr(Str::UpdateAskText);
+    [a addButtonWithTitle:tr(Str::BtnUpdateAskYes)];
+    [a addButtonWithTitle:tr(Str::BtnUpdateAskNo)];
+    a.icon = NSApp.applicationIconImage;
+    sfActivateApp();
+    const bool yes = [a runModal] == NSAlertFirstButtonReturn;
+    SNOW_LOGI("updates: user %s automatic checks", yes ? "allowed" : "declined");
+    Settings s = settings_;
+    s.updates.asked = true;
+    s.updates.check = yes;
+    applySettings(s, false);
+    saveNow();
+    if (yes) checkForUpdates();   // no-op if applySettings already started one
+    updateCursorMode();
+}
+
+void AppHost::maybeAutoCheck() {
+    if (!running_ || !updater_ || !updater_.networkAllowed) return;
+    if (update::autoCheckDue(settings_.updates, static_cast<std::int64_t>(std::time(nullptr)))) [updater_ check];
+}
+
+void AppHost::checkForUpdates() { [updater_ check]; }
+void AppHost::installUpdate() { [updater_ install]; }
+void AppHost::openUpdatePage() { [updater_ openReleasePage]; }
+bool AppHost::updaterNetworkAllowed() const { return updater_ && updater_.networkAllowed; }
+
+std::string AppHost::updateStatusJson() const {
+    if (!updater_) {
+        update::Status s;
+        const update::Version v = update::parseVersion(SNOW_VERSION);
+        s.current = v.valid ? v.text() : SNOW_VERSION;
+        return update::statusToJson(s);
+    }
+    return update::statusToJson([updater_ status]);
+}
+
+void AppHost::onUpdateStatus() {
+    NSString* json = ns(updateStatusJson());
+    [settingsWindow_ updateStatusChanged:json];
+    [quickPanel_ updateStatusChanged:json];
+    updateStatusItem();
 }
 
 void AppHost::setupUi() {
@@ -151,6 +266,11 @@ void AppHost::shutdown() {
     CursorHider::show();
     [cursorTimer_ invalidate];
     cursorTimer_ = nil;
+    [updateAskTimer_ invalidate];
+    [updateFirstCheckTimer_ invalidate];
+    [updateHourlyTimer_ invalidate];
+    updateAskTimer_ = updateFirstCheckTimer_ = updateHourlyTimer_ = nil;
+    [updater_ cancel];
     if (!running_) return;
     running_ = false;
     saveNow();
@@ -334,6 +454,10 @@ void AppHost::applySettings(Settings next, bool fromUi) {
     updateGovernor();
     pushSettingsToUi(fromUi);
     if (running_) scheduleSave();
+    if (running_ && next.updates.check != prev.updates.check) {
+        SNOW_LOGI("updates: automatic check turned %s", next.updates.check ? "on" : "off");
+        if (next.updates.check) maybeAutoCheck();
+    }
 }
 
 void AppHost::applySettingsJson(const std::string& text) {
@@ -354,6 +478,9 @@ void AppHost::applySettingsJson(const std::string& text) {
         pushSettingsToUi(false);
         return;
     }
+    // App-owned values: the UI may hold an older copy of them.
+    s.updates.lastCheckUnix = settings_.updates.lastCheckUnix;
+    if (settings_.updates.asked) s.updates.asked = true;
     applySettings(s, true);
 }
 
@@ -473,6 +600,7 @@ void AppHost::onMenu(MenuCommand cmd, int arg) {
                 } else {
                     sfActivateApp();
                     [quickPanel_ showRelativeToButton:status_.button settingsJSON:ns(toJson(settings_))];
+                    [quickPanel_ updateStatusChanged:ns(updateStatusJson())];
                 }
             } else {
                 [status_ popUpMenu];
@@ -525,6 +653,7 @@ void AppHost::onMenu(MenuCommand cmd, int arg) {
             }
             break;
         }
+        case MenuCommand::OpenUpdateInfo: openSettings("about"); break;
         case MenuCommand::OpenLogFolder:
             [NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[ [NSURL fileURLWithPath:ns(logPath_)] ]];
             break;
@@ -532,13 +661,16 @@ void AppHost::onMenu(MenuCommand cmd, int arg) {
     }
 }
 
-void AppHost::openSettings() {
+void AppHost::openSettings(const std::string& page) {
     if (!settingsWindow_) {
-        onMenu(MenuCommand::OpenSettingsFile, 0);
+        if (page == "about") openUpdatePage();
+        else onMenu(MenuCommand::OpenSettingsFile, 0);
         return;
     }
     sfActivateApp();
     [settingsWindow_ showWithSettingsJSON:ns(toJson(settings_))];
+    [settingsWindow_ updateStatusChanged:ns(updateStatusJson())];
+    if (!page.empty()) [settingsWindow_ showPage:ns(page)];
     tracker_.requestResync();   // the settings window collects snow like any app window
 }
 
@@ -594,6 +726,7 @@ void AppHost::updateStatusItem() {
     st.statusText = statusText();
     st.holdKeys = holdKeysText();
     st.hasSettingsWindow = settingsWindow_ != nil;
+    if (updater_ && [updater_ status].stage == update::Stage::Available) st.updateVersion = [updater_ status].latest;
     [status_ setState:st];
 }
 
@@ -631,6 +764,13 @@ std::string AppHost::diagnosticsJson() const {
     o.set("trackerPollMs", std::round(ts.avgPollMs * 100.0) / 100.0);
     o.set("dockWidth", ts.dockWidth);
     o.set("dockFromAccessibility", ts.dockFromAccessibility);
+    // updates (no URLs, no paths)
+    o.set("updateCheck", settings_.updates.check);
+    o.set("updateLastCheck", static_cast<double>(settings_.updates.lastCheckUnix));
+    o.set("updateStage", update::stageName(updater_ ? [updater_ status].stage : update::Stage::Idle));
+    o.set("updateLatest", updater_ ? [updater_ status].latest : std::string());
+    o.set("updateNetwork", updaterNetworkAllowed());
+    o.set("updateInstallBlocker", updateBlocker_);
     return json::write(o, 0);
 }
 

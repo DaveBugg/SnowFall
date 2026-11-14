@@ -85,6 +85,11 @@ using snow::mac::tr;
                                              keyEquivalent:@""];
     status.enabled = NO;
     [menu addItem:status];
+    if (!s.updateVersion.empty()) {
+        NSString* title = [tr(Str::MenuUpdateAvailableFmt) stringByReplacingOccurrencesOfString:@"%ls"
+                                                                                     withString:[NSString stringWithUTF8String:s.updateVersion.c_str()] ?: @""];
+        [self add:menu title:title cmd:MenuCommand::OpenUpdateInfo checked:NO];
+    }
     [menu addItem:NSMenuItem.separatorItem];
 
     [self add:menu title:tr(s.paused && !s.autoPaused ? Str::MenuResume : Str::MenuPause) cmd:MenuCommand::TogglePause checked:NO];

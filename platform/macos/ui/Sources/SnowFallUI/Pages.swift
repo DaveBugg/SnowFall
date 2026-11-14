@@ -610,6 +610,7 @@ struct AboutPage: View {
                 LinkButton(title: "Telegram", url: "https://t.me/dave_cli")
             }
             BodyText(text: t["AboutDescription"])
+            UpdatesSection(store: store)
             SectionHeading(text: t["GroupPrivacy"]).padding(.top, 4)
             BodyText(text: t["AboutPrivacy"], secondary: true)
             SectionHeading(text: t["GroupLog"]).padding(.top, 4)
@@ -634,6 +635,59 @@ struct AboutPage: View {
             .disabled(store.diagnostics.logPath.isEmpty)
             BodyText(text: t["AboutLicence"], secondary: true)
                 .padding(.top, 4)
+        }
+    }
+}
+
+/// «Обновления»: automatic check, «Check now», the state, and for a newer version «Update»
+/// (signed release, replaceable copy) or the manual hint with the download page.
+struct UpdatesSection: View {
+    @ObservedObject var store: UIStore
+
+    var body: some View {
+        let t = store.strings, u = store.updateStatus
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeading(text: t["GroupUpdates"]).padding(.top, 4)
+            SnowToggle(title: t["ChkCheckUpdates"],
+                       isOn: Binding(get: { store.settings.updates.check }, set: { store.setUpdateCheck($0) }))
+            HStack(spacing: 12) {
+                Button(t["BtnCheckUpdates"]) { store.actions?.checkForUpdates() }
+                    .buttonStyle(SnowButtonStyle())
+                    .frame(width: 190)
+                    .disabled(u.busy)
+                HintText(text: u.line(t), role: u.lineRole)
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+            if u.stage == .available || (u.stage == .failed && !u.latest.isEmpty) {
+                if u.canInstall && u.stage == .available {
+                    HStack(spacing: 10) {
+                        Button(t["BtnUpdateInstall"]) { store.actions?.installUpdate() }
+                            .buttonStyle(SnowButtonStyle(primary: true))
+                            .frame(width: 190)
+                        Button(t["BtnWhatsNew"]) { store.actions?.openUpdatePage() }
+                            .buttonStyle(SnowButtonStyle())
+                            .frame(width: 190)
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    HintText(text: t["UpdateManualHint"])
+                    HStack(spacing: 10) {
+                        Button(t["BtnOpenReleasePage"]) { store.actions?.openUpdatePage() }
+                            .buttonStyle(SnowButtonStyle(primary: true))
+                            .frame(width: 190)
+                        Button(t["BtnWhatsNew"]) { store.actions?.openUpdatePage() }
+                            .buttonStyle(SnowButtonStyle())
+                            .frame(width: 190)
+                        Spacer(minLength: 0)
+                    }
+                }
+            } else if u.stage == .downloading {
+                ProgressView(value: Double(u.progress), total: 100)
+                    .progressViewStyle(.linear)
+                    .tint(store.palette.accent.c)
+                    .frame(maxWidth: 400)
+                    .accessibilityLabel(u.line(t))
+            }
         }
     }
 }

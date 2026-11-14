@@ -72,6 +72,7 @@ final class SettingsWindowController: NSObject, SFSettingsWindow, NSWindowDelega
 
     func show(withSettingsJSON json: String) {
         store.load(json: json)
+        store.refreshUpdateStatus()
         let w = window ?? makeWindow()
         applyTheme(store.settings.system.uiTheme)
         w.makeKeyAndOrderFront(nil)
@@ -81,6 +82,14 @@ final class SettingsWindowController: NSObject, SFSettingsWindow, NSWindowDelega
 
     func updateSettingsJSON(_ json: String) {
         store.load(json: json)
+    }
+
+    func updateStatusChanged(_ json: String) {
+        store.loadUpdateStatus(json: json)
+    }
+
+    func showPage(_ page: String) {
+        if let p = SettingsPage.named(page) { store.page = p }
     }
 
     func close() {
@@ -168,6 +177,7 @@ final class QuickPanelController: NSObject, SFQuickPanel, NSPopoverDelegate {
 
     func showRelative(to button: NSStatusBarButton, settingsJSON json: String) {
         store.load(json: json)
+        store.refreshUpdateStatus()
         store.showPicker = false
         let pop = popover ?? makePopover()
         applyTheme(store.settings.system.uiTheme)
@@ -180,6 +190,10 @@ final class QuickPanelController: NSObject, SFQuickPanel, NSPopoverDelegate {
 
     func updateSettingsJSON(_ json: String) {
         store.load(json: json)
+    }
+
+    func updateStatusChanged(_ json: String) {
+        store.loadUpdateStatus(json: json)
     }
 
     func close() {
@@ -202,6 +216,9 @@ final class QuickPanelController: NSObject, SFQuickPanel, NSPopoverDelegate {
         case .settings:
             close()
             actions.openSettings()
+        case .update:
+            close()
+            actions.openUpdateInfo()
         }
     }
 

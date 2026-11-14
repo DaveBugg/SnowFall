@@ -22,6 +22,8 @@
 
 #import "SFBridge.h"
 
+@class SFUpdater;
+
 namespace snow::mac {
 
 struct LaunchOptions {
@@ -49,7 +51,7 @@ public:
     void clearSnow() { runner_.clearSnow(); }
     void callSnowplow() { runner_.triggerSnowplow(); }
     void fireworks() { runner_.triggerFireworks(); }
-    void openSettings();
+    void openSettings(const std::string& page = {});   // page: "" (last one) or "about", ...
     void quit();
     void remoteCommand(const std::string& cmd);
 
@@ -62,6 +64,13 @@ public:
     bool hasSettingsWindow() const { return settingsWindow_ != nil; }
     bool settingsWindowOpen() const { return settingsWindow_ && settingsWindow_.isOpen; }
     bool hasQuickPanel() const { return quickPanel_ != nil; }
+
+    // Updates (app/updater.h). The self-test runs with the network disabled.
+    std::string updateStatusJson() const;
+    void checkForUpdates();
+    void installUpdate();
+    void openUpdatePage();
+    bool updaterNetworkAllowed() const;
     void closeUi();
     std::string cursorModeName() const;   // "hold" | "replace" | "replace-unavailable"
 
@@ -86,6 +95,11 @@ private:
     void updateCursorMode();
     void cursorTick();
     bool pointerOverSystemChrome() const;
+    void startUpdates(const LaunchOptions& options);
+    void scheduleUpdateQuestion(double delaySeconds);
+    void askAboutUpdates();
+    void maybeAutoCheck();
+    void onUpdateStatus();
 
     std::string logPath_;
     std::string dataDir_;
@@ -119,6 +133,12 @@ private:
     NSTimer* cursorTimer_ = nil;
     bool cursorReplaceFailed_ = false;
     double lastInteractionActive_ = 0;
+
+    SFUpdater* updater_ = nil;
+    NSTimer* updateAskTimer_ = nil;
+    NSTimer* updateFirstCheckTimer_ = nil;
+    NSTimer* updateHourlyTimer_ = nil;
+    std::string updateBlocker_;   // why this copy cannot be replaced in place ("" = it can)
 };
 
 }  // namespace snow::mac

@@ -2,6 +2,9 @@
 
 #import <AppKit/AppKit.h>
 #import <Metal/Metal.h>
+#include <spawn.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -15,6 +18,7 @@
 
 #include "app/app_host.h"
 #include "app/strings_mac.h"
+#include "app/updater.h"
 #include "core/skins.h"
 #include "diagnostics/log.h"
 #include "overlay/overlay_system.h"
@@ -27,6 +31,9 @@
 #include "system/platform_services.h"
 #include "system/text_util.h"
 #include "tracker/window_tracker.h"
+#include "update/update.h"
+
+extern char** environ;
 
 namespace snow::mac {
 SimPlatformHooks makeMacSimHooks();   // app_host.mm
@@ -262,12 +269,165 @@ void renderTests(id<MTLDevice> device) {
     check(empty.empty(), fmt("render: all %zu shape variants draw", cells.size()), empty.empty() ? "" : "empty: " + empty);
 }
 
+// ---- updates: the installer pieces, offline (a local disk image, dummy bundles) -------------------
+
+bool pathExists(const std::string& p) {
+    struct stat st{};
+    return ::stat(p.c_str(), &st) == 0;
+}
+
+std::string readText(const std::string& p) {
+    NSString* t = [NSString stringWithContentsOfFile:[NSString stringWithUTF8String:p.c_str()] encoding:NSUTF8StringEncoding error:nil];
+    return t ? std::string(t.UTF8String ?: "") : std::string();
+}
+
+bool writeText(const std::string& p, const std::string& text) {
+    FILE* f = std::fopen(p.c_str(), "w");
+    if (!f) return false;
+    std::fputs(text.c_str(), f);
+    std::fclose(f);
+    return true;
+}
+
+std::string quoted(const std::string& p) { return "'" + p + "'"; }
+
+pid_t spawnSleep(const char* seconds) {
+    const char* argv[] = {"/bin/sleep", seconds, nullptr};
+    pid_t pid = 0;
+    if (posix_spawn(&pid, "/bin/sleep", nullptr, nullptr, const_cast<char* const*>(argv), environ) != 0) return 0;
+    return pid;
+}
+
+bool waitChild(pid_t pid, double seconds, int* status) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+    while (std::chrono::steady_clock::now() < end) {
+        int st = 0;
+        const pid_t r = ::waitpid(pid, &st, WNOHANG);
+        if (r == pid) {
+            if (status) *status = st;
+            return true;
+        }
+        if (r < 0) return false;
+        ::usleep(20000);
+    }
+    return false;
+}
+
+void updateChecks(const std::string& dir) {
+    // No network in the self-test: the updater refuses every request.
+    {
+        SFUpdater* u = [[SFUpdater alloc] initWithNetworkAllowed:NO];
+        __block int attempts = 0, statuses = 0;
+        u.onCheckAttempt = ^{
+          ++attempts;
+        };
+        u.onStatus = ^{
+          ++statuses;
+        };
+        [u check];
+        [u install];
+        pumpRunLoop(0.2);
+        check(attempts == 0 && statuses == 0 && [u status].stage == update::Stage::Idle,
+              "updates: updater without network makes no request");
+        json::Value st;
+        const std::string j = update::statusToJson([u status]);
+        check(json::parse(j, st) && st.find("stage") && st.find("stage")->asString() == "idle", "updates: status JSON", j);
+        const std::string blocker = [u installBlocker];
+        pass("updates: in-place install of this build", blocker.empty() ? "possible" : blocker);
+    }
+
+    NSBundle* mb = NSBundle.mainBundle;
+    const std::string bundle = mb.bundlePath.UTF8String ?: "";
+    NSString* ver = [mb objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    const std::string version = [ver isKindOfClass:[NSString class]] ? std::string(ver.UTF8String) : std::string();
+    const std::string bundleId = mb.bundleIdentifier.UTF8String ?: "";
+    const std::string base = dir + "/updates";
+    ::mkdir(base.c_str(), 0755);
+
+    // Disk image -> staged app (hdiutil attach, ditto, codesign --verify, version check).
+    if (bundle.size() < 5 || bundle.substr(bundle.size() - 4) != ".app" || version.empty()) {
+        skip("updates: stage from a disk image", "not running from an app bundle");
+    } else {
+        const std::string src = base + "/src", dmg = base + "/test.dmg", dest = base + "/dest";
+        ::mkdir(src.c_str(), 0755);
+        ::mkdir(dest.c_str(), 0755);
+        const bool copied = std::system(("/usr/bin/ditto " + quoted(bundle) + " " + quoted(src + "/SnowFall.app")).c_str()) == 0;
+        bool made = false;
+        for (int i = 0; copied && !made && i < 3; ++i) {   // hdiutil is sometimes "busy" on CI machines
+            if (i > 0) ::sleep(2);
+            made = std::system(("/usr/bin/hdiutil create -quiet -volname SnowFallTest -srcfolder " + quoted(src) +
+                                " -ov -fs HFS+ -format UDZO " + quoted(dmg)).c_str()) == 0;
+        }
+        if (!made || !pathExists(dmg)) {
+            skip("updates: stage from a disk image", "hdiutil create failed on this machine");
+        } else {
+            const auto t0 = std::chrono::steady_clock::now();
+            std::string why;
+            const std::string staged = dest + "/.SnowFall-update.app";
+            const bool ok = stageAppFromDiskImage(dmg, staged, version, bundleId, &why);
+            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            check(ok && pathExists(staged + "/Contents/MacOS/SnowFall") && pathExists(staged + "/Contents/Info.plist"),
+                  "updates: stage the app from a disk image (attach, copy, detach, codesign, version)",
+                  ok ? fmt("%.1f s", secs) : why);
+            std::string why2;
+            const std::string staged2 = dest + "/other.app";
+            const bool wrong = stageAppFromDiskImage(dmg, staged2, "99.0.0", bundleId, &why2);
+            check(!wrong && !pathExists(staged2), "updates: a disk image with another version is refused", why2);
+            std::system(("/bin/rm -rf " + quoted(src) + " " + quoted(dest) + " " + quoted(dmg)).c_str());
+        }
+    }
+
+    // Bundle swap by the helper script (no relaunch): waits for the pid, swaps, removes the old one.
+    {
+        const std::string sw = base + "/swap";
+        const std::string cur = sw + "/SnowFall.app", staged = sw + "/.SnowFall-update.app", old = sw + "/.SnowFall-old.app";
+        const std::string log = sw + "/helper.log";
+        ::mkdir(sw.c_str(), 0755);
+        ::mkdir(cur.c_str(), 0755);
+        ::mkdir(staged.c_str(), 0755);
+        writeText(cur + "/marker", "old");
+        writeText(staged + "/marker", "new");
+        const pid_t sleeper = spawnSleep("0.6");
+        SwapPlan plan;
+        plan.waitForPid = sleeper;
+        plan.currentApp = cur;
+        plan.stagedApp = staged;
+        plan.backupApp = old;
+        plan.logPath = log;
+        plan.reopen = false;
+        pid_t helper = 0;
+        std::string why;
+        const bool launched = sleeper > 0 && launchSwapHelper(plan, &helper, &why);
+        int st = -1;
+        // The helper must still be waiting while the "app" runs.
+        const bool waitedForApp = launched && ::waitpid(helper, &st, WNOHANG) == 0;
+        if (sleeper > 0) waitChild(sleeper, 5, nullptr);   // reap it (a zombie would still answer kill -0)
+        const bool finished = launched && waitChild(helper, 15, &st);
+        check(launched && waitedForApp && finished && WIFEXITED(st) && WEXITSTATUS(st) == 0 && readText(cur + "/marker") == "new" &&
+                  !pathExists(staged) && !pathExists(old),
+              "updates: helper swaps the bundles after the app quits",
+              launched ? readText(log).substr(0, 400) : why);
+
+        // Staged app missing: nothing changes, the current app stays.
+        const pid_t sleeper2 = spawnSleep("0.1");
+        plan.waitForPid = sleeper2;
+        pid_t helper2 = 0;
+        const bool launched2 = sleeper2 > 0 && launchSwapHelper(plan, &helper2, &why);
+        if (sleeper2 > 0) waitChild(sleeper2, 5, nullptr);
+        int st2 = -1;
+        const bool finished2 = launched2 && waitChild(helper2, 15, &st2);
+        check(finished2 && WIFEXITED(st2) && WEXITSTATUS(st2) == 1 && readText(cur + "/marker") == "new" && !pathExists(old),
+              "updates: helper keeps the current app when the staged one is missing");
+        std::system(("/bin/rm -rf " + quoted(sw)).c_str());
+    }
+}
+
 }  // namespace
 
 int runSelfTest() {
     // Watchdog: a hang must fail the CI job, not stall it.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 120 * NSEC_PER_SEC), dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
-      std::printf("[FAIL] selftest watchdog: still running after 120 s\n");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 240 * NSEC_PER_SEC), dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+      std::printf("[FAIL] selftest watchdog: still running after 240 s\n");
       std::fflush(stdout);
       _exit(3);
     });
@@ -415,6 +575,9 @@ int runSelfTest() {
         }
     }
 
+    // ---- updates (offline) ---------------------------------------------------------------------
+    updateChecks(dir);
+
     // ---- the whole app: status item, UI module, every subsystem wired together ----------------
     if (screens.empty()) {
         skip("app", "no screens");
@@ -432,6 +595,14 @@ int runSelfTest() {
             const std::string dj = host->diagnosticsJson();
             const bool parsed = json::parse(dj, diag) && diag.find("fps") && diag.find("monitors") && diag.find("version");
             check(parsed, "app: diagnosticsJSON", dj.substr(0, 240));
+            check(parsed && diag.find("updateStage") && !host->updaterNetworkAllowed(),
+                  "app: updater present, network disabled in the self-test");
+            host->checkForUpdates();   // must be a no-op here
+            json::Value us;
+            const std::string usj = host->updateStatusJson();
+            check(json::parse(usj, us) && us.find("stage") && us.find("stage")->asString() == "idle" &&
+                      host->settings().updates.lastCheckUnix == 0,
+                  "app: «Check now» makes no request in the self-test", usj);
             // Settings JSON from the UI is applied and comes back sanitized.
             Settings s = host->settings();
             s.weather.intensity = 31;

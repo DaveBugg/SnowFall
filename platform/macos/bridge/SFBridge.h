@@ -42,6 +42,23 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSString *> *)runningAppNames;
 /// A live preview view (miniature desktop with the real simulation) for the settings window.
 - (NSView *)makePreviewView;
+
+// ---- updates (core/update/update.h) -------------------------------------------------------
+/// Current update state, JSON of update::statusToJson:
+/// { "stage":"idle|checking|upToDate|available|downloading|installing|failed", "current":"0.1.2",
+///   "latest":"0.1.3", "pageUrl":"https://github.com/…", "notes":"…", "canInstall":true,
+///   "progress":0..100, "error":"UpdateErrNetwork" }   ("error" is a StrId name of the string table)
+/// Changes are pushed with -updateStatusChanged: of the settings window and the quick panel.
+- (NSString *)updateStatusJSON;
+/// «Проверить сейчас»: one request to the GitHub API (ignored while a check / install runs).
+- (void)checkForUpdates;
+/// «Обновить»: download, verify and install the available version (only when canInstall);
+/// the app quits and the new version starts.
+- (void)installUpdate;
+/// «Страница загрузки» / «Что нового»: the release page in the browser.
+- (void)openUpdatePage;
+/// Settings window on the «О программе» page (header badge / menu item of an available update).
+- (void)openUpdateInfo;
 @end
 
 /// The live preview returned by -makePreviewView (implemented by the app shell with Metal).
@@ -54,6 +71,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol SFSettingsWindow <NSObject>
 - (void)showWithSettingsJSON:(NSString *)json;   // create on first use, bring to front
 - (void)updateSettingsJSON:(NSString *)json;     // external change: refresh controls, no echo
+- (void)updateStatusChanged:(NSString *)json;    // -[SFAppActions updateStatusJSON] changed
+- (void)showPage:(NSString *)page;               // "about" (others: snow, drifts, tools, performance, festive, system)
 - (void)close;
 @property (nonatomic, readonly) BOOL isOpen;
 @end
@@ -62,6 +81,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol SFQuickPanel <NSObject>
 - (void)showRelativeToButton:(NSStatusBarButton *)button settingsJSON:(NSString *)json;
 - (void)updateSettingsJSON:(NSString *)json;
+- (void)updateStatusChanged:(NSString *)json;
 - (void)close;
 @property (nonatomic, readonly) BOOL isShown;
 @end

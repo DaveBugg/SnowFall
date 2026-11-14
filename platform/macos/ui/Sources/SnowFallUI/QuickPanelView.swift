@@ -11,7 +11,7 @@ struct QuickPanelView: View {
     var onCommand: (QuickCommand) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    enum QuickCommand { case pause, clear, fireworks, settings }
+    enum QuickCommand { case pause, clear, fireworks, settings, update }
 
     var body: some View {
         let p = store.palette
@@ -47,12 +47,17 @@ struct QuickPanelView: View {
                         .foregroundColor(p.headerText.c)
                     Text(store.statusText).font(.system(size: 12)).foregroundColor(p.headerTextSecondary.c).lineLimit(1)
                 }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 6)
+                if store.updateStatus.hasNewer {
+                    UpdateBadge(store: store, palette: p) { onCommand(.update) }
+                }
             }
             .padding(.horizontal, 14)
             .padding(.bottom, p.garland ? 8 : 0)
         }
         .frame(height: 56)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     private var content: some View {
