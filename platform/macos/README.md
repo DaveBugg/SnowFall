@@ -122,6 +122,40 @@ whole; keys the UI does not model are preserved. Hotkeys are stored in the core 
 reaches `-applySettingsJSON:` and renders every page in every theme to PNG; CI
 (`.github/workflows/mac-ui.yml`) uploads them as the `snowfall-ui-selftest` artifact.
 
+## Updates
+
+Portable logic in `core/update` (versions, release JSON, URL allow-list, SHA256SUMS); the Mac
+part is `app/updater.mm` (`SFUpdater`, owned by `AppHost`) and `system/update_support.cpp`
+(Security / CommonCrypto, install-location checks, the swap script; unit-tested in `mac_unit`).
+
+- **Consent.** A few seconds after start, once (`updates.asked`), an alert asks «Проверять
+  обновления?» — not over another modal dialog, a fullscreen app or interaction mode, never with
+  `--data-dir` or in `--selftest`. The answer is `updates.check`; the toggle on the About page
+  changes it later.
+- **Check.** 30 s after start and then hourly the app checks whether a check is due (`check` on,
+  last one ≥ 24 h ago); «Check now» checks at once. Every attempt stores `updates.lastCheck`.
+  One GET of the GitHub "latest release" API in an ephemeral `NSURLSession` (no cookies, cache
+  or credentials), `User-Agent: SnowFall/<version>`, 15 s timeout, ≤ 512 KB. Every URL and every
+  redirect must pass `update::isAllowedUrl`.
+- **Install** («Update», only when the release has a `.dmg`, `SHA256SUMS` and
+  `SHA256SUMS.sig` and this copy can be replaced: not App-Translocated, not on a read-only volume
+  or disk image, parent directory writable): SHA256SUMS signature (ECDSA P-256, release key) →
+  dmg download to `~/Library/Caches/SnowFall/updates` → SHA-256 vs SHA256SUMS → `hdiutil attach
+  -readonly` → `ditto` to `.SnowFall-update.app` next to the app → detach → `codesign --verify
+  --deep --strict` + version / bundle id check → a detached `/bin/sh` helper waits for the app to
+  quit, renames old → `.SnowFall-old.app`, new → `SnowFall.app` (rolls back on failure), removes
+  the old one and opens the new app; the app quits normally. The helper writes
+  `~/Library/Caches/SnowFall/updates/helper.log`; the next start copies it into the app log and
+  cleans the folder. Otherwise the About page offers the download page.
+- **UI.** About page: «Обновления» group (toggle, «Check now», state line, Update / Download page /
+  What's new); a «Version … available» badge in the settings header and the quick panel; a menu
+  item «Update … available…». Diagnostics JSON: `updateCheck`, `updateLastCheck`, `updateStage`,
+  `updateLatest`, `updateNetwork`, `updateInstallBlocker`.
+- **Tests.** `mac_unit` checks the Security verifier with the real test signature, SHA-256 and the
+  install-location rules; `--selftest` runs with the network disabled and exercises the installer
+  offline (a local disk image of the built app → staging + codesign; the swap helper on dummy
+  bundles). No test touches the network.
+
 ## Known limitations on macOS
 
 - Clicking the snow needs the Accessibility permission (event tap). Without it interaction mode

@@ -105,6 +105,7 @@ static const char kInitialSettingsText[] = R"JSON({
 @property (nonatomic) BOOL paused;
 @property (nonatomic, weak) SFDemoPreviewView *preview;
 @property (nonatomic, strong) id<SFSettingsWindow> settingsWindow;
+@property (nonatomic, copy) NSString *updateJSON;   // fake update state
 @end
 
 @implementation SFDemoActions
@@ -114,8 +115,19 @@ static const char kInitialSettingsText[] = R"JSON({
         _applied = [NSMutableArray array];
         _invoked = [NSMutableArray array];
         _currentJSON = kInitialSettings;
+        _updateJSON = [SFDemoActions updateStatus:@"idle" latest:@"" canInstall:NO];
     }
     return self;
+}
+
++ (NSString *)updateStatus:(NSString *)stage latest:(NSString *)latest canInstall:(BOOL)canInstall {
+    NSDictionary *d = @{
+        @"stage": stage, @"current": @"0.1.2", @"latest": latest,
+        @"pageUrl": @"https://github.com/DaveBugg/SnowFall/releases/tag/v0.1.3", @"notes": @"",
+        @"canInstall": @(canInstall), @"progress": @0, @"error": @""
+    };
+    NSData *data = [NSJSONSerialization dataWithJSONObject:d options:0 error:nil];
+    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 }
 
 - (NSDictionary *)current {
@@ -148,6 +160,21 @@ static const char kInitialSettingsText[] = R"JSON({
     [self.settingsWindow showWithSettingsJSON:self.currentJSON];
 }
 - (void)quitApp { [self.invoked addObject:@"quitApp"]; }
+
+// ---- updates: no network here; a check "finds" version 0.1.3
+- (NSString *)updateStatusJSON { return self.updateJSON; }
+- (void)checkForUpdates {
+    [self.invoked addObject:@"checkForUpdates"];
+    self.updateJSON = [SFDemoActions updateStatus:@"available" latest:@"0.1.3" canInstall:YES];
+    [self.settingsWindow updateStatusChanged:self.updateJSON];
+}
+- (void)installUpdate { [self.invoked addObject:@"installUpdate"]; }
+- (void)openUpdatePage { [self.invoked addObject:@"openUpdatePage"]; }
+- (void)openUpdateInfo {
+    [self.invoked addObject:@"openUpdateInfo"];
+    [self.settingsWindow showWithSettingsJSON:self.currentJSON];
+    [self.settingsWindow showPage:@"about"];
+}
 
 - (NSString *)diagnosticsJSON {
     NSDictionary *strings = [self uiStrings];

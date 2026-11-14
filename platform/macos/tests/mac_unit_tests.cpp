@@ -6,7 +6,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
+
+#include <cstring>
 #include <regex>
+#include <vector>
 
 #include "app/icon_render.h"
 #include "interaction/tools.h"
@@ -15,7 +19,10 @@
 #include "settings/settings_store.h"
 #include "system/hotkey_map.h"
 #include "system/text_util.h"
+#include "system/update_support.h"
 #include "tracker/desktop_model.h"
+#include "update/update.h"
+#include "update/update_test_vector.h"
 
 using namespace snow;
 using namespace snow::mac;
@@ -402,4 +409,100 @@ TEST(cursor_hold_keeps_the_held_ball_marker) {
     b[1].halfW = b[1].halfH = 20;
     const auto out = layoutCursorHold(b, 1);
     CHECK(out.size() == 2 && out[0].halfW == 23 && out[1].x == 50);
+}
+
+// ---- updates: Security verifier, SHA-256, install location, helper script ------------------
+TEST(update_signature_test_vector) {
+    const std::size_t n = sizeof update::kTestSignedText - 1;
+    const auto* sig0 = update::kTestSignatureDer;
+    const std::size_t sigN = sizeof update::kTestSignatureDer;
+    CHECK(updates::verifySignature(update::kTestSignedText, n, sig0, sigN));
+    std::string text(update::kTestSignedText, n);
+    text[0] ^= 1;   // one flipped bit in the signed bytes
+    CHECK(!updates::verifySignature(text.data(), text.size(), sig0, sigN));
+    std::vector<std::uint8_t> sig(sig0, sig0 + sigN);
+    sig[10] ^= 0x40;   // a flipped byte in r
+    CHECK(!updates::verifySignature(update::kTestSignedText, n, sig.data(), sig.size()));
+    CHECK(!updates::verifySignature(update::kTestSignedText, n, sig0, 10));   // truncated
+    std::uint8_t otherKey[65];
+    std::memcpy(otherKey, update::kReleasePublicKey, 65);
+    otherKey[0] = 0x02;   // not an uncompressed point
+    CHECK(!updates::verifySignature(update::kTestSignedText, n, sig0, sigN, otherKey, 65));
+    otherKey[0] = 0x04;
+    otherKey[40] ^= 1;   // another (invalid) point
+    CHECK(!updates::verifySignature(update::kTestSignedText, n, sig0, sigN, otherKey, 65));
+}
+
+TEST(update_sha256) {
+    CHECK(updates::sha256Hex("abc", 3) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    CHECK(updates::sha256Hex("", 0) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    char path[] = "/tmp/snowfall-sha-XXXXXX";
+    const int fd = mkstemp(path);
+    CHECK(fd >= 0);
+    if (fd >= 0) {
+        CHECK(write(fd, "abc", 3) == 3);
+        close(fd);
+        std::string hex;
+        CHECK(updates::sha256FileHex(path, hex) && hex == updates::sha256Hex("abc", 3));
+        unlink(path);
+        CHECK(!updates::sha256FileHex(path, hex));
+    }
+}
+
+TEST(update_install_location) {
+    updates::BundleFacts ok;
+    ok.exists = true;
+    ok.parentWritable = true;
+    CHECK(updates::installBlocker("/Applications/SnowFall.app", ok).empty());
+    CHECK(updates::installBlocker("/Users/me/Applications/SnowFall.app/", ok).empty());
+    CHECK(updates::isTranslocatedPath("/private/var/folders/x/T/AppTranslocation/1234-ABCD/d/SnowFall.app"));
+    CHECK(!updates::isTranslocatedPath("/Applications/SnowFall.app"));
+    CHECK(updates::installBlocker("/private/var/folders/x/T/AppTranslocation/1234/d/SnowFall.app", ok) == "translocated");
+    CHECK(updates::installBlocker("/Applications/SnowFall", ok) == "not-a-bundle");
+    CHECK(updates::installBlocker("SnowFall.app", ok) == "not-a-bundle");
+    updates::BundleFacts f = ok;
+    f.exists = false;
+    CHECK(updates::installBlocker("/Applications/SnowFall.app", f) == "not-a-bundle");
+    f = ok;
+    f.readOnlyVolume = true;
+    CHECK(updates::installBlocker("/Volumes/SnowFall/SnowFall.app", f) == "read-only-volume");
+    f = ok;
+    f.ejectableVolume = true;
+    CHECK(updates::installBlocker("/Volumes/SnowFall/SnowFall.app", f) == "disk-image");
+    CHECK(updates::installBlocker("/Applications/SnowFall.app", f).empty());   // only under /Volumes
+    f = ok;
+    f.parentWritable = false;
+    CHECK(updates::installBlocker("/Applications/SnowFall.app", f) == "not-writable");
+
+    CHECK(updates::parentDirectory("/Applications/SnowFall.app") == "/Applications");
+    CHECK(updates::parentDirectory("/Applications/SnowFall.app/") == "/Applications");
+    CHECK(updates::parentDirectory("/SnowFall.app") == "/");
+    CHECK(updates::stagingBundlePath("/Applications/SnowFall.app") == "/Applications/.SnowFall-update.app");
+    CHECK(updates::backupBundlePath("/Applications/SnowFall.app") == "/Applications/.SnowFall-old.app");
+    CHECK(updates::stagingBundlePath("/SnowFall.app") == "/.SnowFall-update.app");
+
+    // Facts of a real directory: /tmp is writable, not read-only.
+    char dir[] = "/tmp/snowfall-loc-XXXXXX";
+    CHECK(mkdtemp(dir) != nullptr);
+    const std::string app = std::string(dir) + "/SnowFall.app";
+    CHECK(mkdir(app.c_str(), 0755) == 0);
+    const updates::BundleFacts real = updates::bundleFacts(app);
+    CHECK(real.exists && real.parentWritable && !real.readOnlyVolume);
+    CHECK(updates::installBlocker(app, real).empty());
+    rmdir(app.c_str());
+    rmdir(dir);
+    CHECK(!updates::bundleFacts(app).exists);
+}
+
+TEST(update_helper_script_and_redaction) {
+    const std::string s = updates::swapHelperScript();
+    CHECK(s.rfind("#!/bin/sh\n", 0) == 0);
+    CHECK(s.find("kill -0 \"$pid\"") != std::string::npos);
+    CHECK(s.find("mv \"$old\" \"$cur\"") != std::string::npos);   // rollback
+    CHECK(s.find("/usr/bin/open") != std::string::npos);
+    const char* home = getenv("HOME");
+    if (home && std::strlen(home) > 1) {
+        CHECK(updates::redactHome(std::string("log at ") + home + "/Library/Logs") == "log at ~/Library/Logs");
+    }
+    CHECK(updates::redactHome("nothing") == "nothing");
 }

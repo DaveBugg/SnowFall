@@ -101,6 +101,13 @@ struct PrivacySettings: Codable, Equatable {
     var telemetry = false
 }
 
+/// json "updates". "lastCheck" belongs to the app: it is not modelled, so the document keeps the
+/// received value (and the app ignores what the UI sends for it).
+struct UpdateSettings: Codable, Equatable {
+    var check = false   // automatic check once a day
+    var asked = false   // the one-time question was answered
+}
+
 struct Settings: Codable, Equatable {
     var schemaVersion = 1
     var enabled = true
@@ -114,6 +121,7 @@ struct Settings: Codable, Equatable {
     var festive = FestiveSettings()
     var userPresets: [UserPreset] = []
     var privacy = PrivacySettings()
+    var updates = UpdateSettings()
 
     static let maxUserPresets = 20
     static let maxPresetNameChars = 40
@@ -245,6 +253,15 @@ extension UserPreset {
     }
 }
 
+extension UpdateSettings {
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        check = c.value(.check, check)
+        asked = c.value(.asked, asked)
+    }
+}
+
 extension PrivacySettings {
     init(from decoder: Decoder) throws {
         self.init()   // telemetry is never read: always false
@@ -269,6 +286,7 @@ extension Settings {
             userPresets = list.compactMap { $0.value }
         }
         privacy = PrivacySettings()
+        updates = c.value(.updates, updates)
     }
 }
 
@@ -361,10 +379,12 @@ extension Settings {
     }
 
     /// «Восстановить значения по умолчанию»: everything back to defaults except the user's own
-    /// presets (user data, not a setting) — same rule as the Windows UI.
+    /// presets (user data, not a setting) — same rule as the Windows UI — and the answer about
+    /// update checks (a consent, not a look).
     func restoredDefaults() -> Settings {
         var s = Settings()
         s.userPresets = userPresets
+        s.updates = updates
         return s
     }
 

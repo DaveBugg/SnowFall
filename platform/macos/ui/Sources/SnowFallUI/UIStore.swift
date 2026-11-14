@@ -23,6 +23,20 @@ enum SettingsPage: Int, CaseIterable, Identifiable {
         case .about: return "TabAbout"
         }
     }
+
+    /// Bridge names (-[SFSettingsWindow showPage:]).
+    static func named(_ name: String) -> SettingsPage? {
+        switch name.lowercased() {
+        case "snow": return .snow
+        case "drifts": return .drifts
+        case "tools": return .tools
+        case "performance": return .performance
+        case "festive": return .festive
+        case "system": return .system
+        case "about", "updates": return .about
+        default: return nil
+        }
+    }
 }
 
 enum MessageRole { case secondary, error, ok }
@@ -47,6 +61,8 @@ final class UIStore: ObservableObject {
     @Published var presetMessage: (text: String, role: MessageRole) = ("", .secondary)
     /// Fixed "now" for the countdown (self-test screenshots); nil = the real clock.
     @Published var nowOverride: Date?
+    /// Update state pushed by the app (-updateStatusChanged:) or pulled on show.
+    @Published private(set) var updateStatus = UpdateStatus()
 
     private var document = SettingsDocument()
     private var stringsLanguage: UILanguage?
@@ -95,6 +111,24 @@ final class UIStore: ObservableObject {
         }
         if list != skins { skins = list }
         refreshHotkeyStatus()
+    }
+
+    func loadUpdateStatus(json: String) {
+        let s = UpdateStatus(json: json)
+        if s != updateStatus { updateStatus = s }
+    }
+
+    func refreshUpdateStatus() {
+        guard let actions else { return }
+        loadUpdateStatus(json: actions.updateStatusJSON())
+    }
+
+    /// «Проверять обновления»: switching it on also answers the one-time question.
+    func setUpdateCheck(_ on: Bool) {
+        update {
+            $0.updates.check = on
+            $0.updates.asked = true
+        }
     }
 
     func refreshDiagnostics() {

@@ -17,6 +17,25 @@ public final class SFUISelfTest: NSObject, SFUISelfTestRunner {
     }
 }
 
+/// Fake update states (what -[SFAppActions updateStatusJSON] returns in each stage).
+enum FakeUpdate {
+    static let page = "https://github.com/DaveBugg/SnowFall/releases/tag/v0.1.3"
+    static func json(_ stage: String, latest: String = "0.1.3", canInstall: Bool = true, progress: Int = 0,
+                     error: String = "") -> String {
+        let d: [String: Any] = ["stage": stage, "current": "0.1.2", "latest": latest, "pageUrl": page,
+                                "notes": "Snow on the Dock", "canInstall": canInstall, "progress": progress, "error": error]
+        guard let data = try? JSONSerialization.data(withJSONObject: d, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else { return "{}" }
+        return text
+    }
+    static let idle = json("idle", latest: "")
+    static let available = json("available")
+    static let manual = json("available", canInstall: false)
+    static let downloading = json("downloading", progress: 42)
+    static let failed = json("failed", error: "UpdateErrVerify")
+    static let upToDate = json("upToDate", latest: "")
+}
+
 private final class SelfTestRunner {
     let probe: any SFSelfTestProbe
     let json: String
@@ -222,6 +241,38 @@ private final class SelfTestRunner {
         check(HotkeyRecorder.outcome(keyCode: kVK_Delete, flags: []) == .clear, "hotkey: Backspace disables")
         check(HotkeyRecorder.outcome(keyCode: kVK_Escape, flags: []) == .cancel, "hotkey: Esc cancels")
 
+        // Update status (JSON of update::statusToJson) and its texts.
+        let avail = UpdateStatus(json: FakeUpdate.available)
+        check(avail.stage == .available && avail.latest == "0.1.3" && avail.canInstall && avail.hasNewer && !avail.busy,
+              "update status JSON parsed")
+        check(UpdateStatus(json: "garbage") == UpdateStatus() && UpdateStatus(json: #"{"stage":"warp"}"#).stage == .idle,
+              "update status: bad JSON / unknown stage -> idle")
+        check(UpdateStatus(json: FakeUpdate.downloading).busy && UpdateStatus(json: FakeUpdate.downloading).progress == 42,
+              "update status: downloading progress")
+        let ut = L10n(["UpdateAvailableFmt": "Version %@ is available", "UpdateDownloadingFmt": "Downloading the update… %d%%",
+                       "UpdateFailedFmt": "Failed: %@", "UpdateErrVerify": "bad signature", "UpdateErrNetwork": "offline",
+                       "UpdateIdle": "Not checked yet"])
+        check(avail.line(ut) == "Version 0.1.3 is available", "update line: available")
+        check(UpdateStatus(json: FakeUpdate.downloading).line(ut) == "Downloading the update… 42%", "update line: downloading %d%%")
+        check(UpdateStatus(json: FakeUpdate.failed).line(ut) == "Failed: bad signature", "update line: failed with the reason")
+        check(UpdateStatus(json: FakeUpdate.json("failed")).line(ut) == "Failed: offline", "update line: failed without a reason")
+        check(UpdateStatus().line(ut) == "Not checked yet", "update line: idle")
+        if let doc = SettingsDocument(json: #"{"updates": {"check": true, "asked": "yes", "lastCheck": 1731600000}}"#) {
+            check(doc.settings.updates.check && !doc.settings.updates.asked, "updates settings: tolerant decode")
+            var d2 = doc
+            d2.settings.updates.asked = true
+            let back = SettingsDocument(json: d2.json())
+            check(((back?.raw["updates"] as? [String: Any])?["lastCheck"] as? NSNumber)?.int64Value == 1731600000
+                  && back?.settings.updates.asked == true, "updates.lastCheck (app-owned) survives an edit")
+        } else {
+            check(false, "updates settings document parses")
+        }
+        var withUpdates = Settings()
+        withUpdates.updates = UpdateSettings(check: true, asked: true)
+        check(withUpdates.restoredDefaults().updates == UpdateSettings(check: true, asked: true),
+              "restore defaults keeps the update answer")
+        check(SettingsPage.named("about") == .about && SettingsPage.named("nope") == nil, "page names of -showPage:")
+
         // Preset name validation.
         var s = Settings()
         s.userPresets = [UserPreset(name: "Office")]
@@ -326,6 +377,35 @@ private final class SelfTestRunner {
         store.refreshDiagnostics()
         check(store.diagnostics.cursorMode != "replace-unavailable", "cursorMode clears when the option is off")
 
+        // Updates: toggle, commands, pushed status, page switch.
+        check(!store.strings["ChkCheckUpdates"].hasPrefix("ChkCheck") && !store.strings["HeaderUpdateFmt"].hasPrefix("Header"),
+              "update strings come from the table")
+        store.setUpdateCheck(true)
+        check((value("updates.check") as? NSNumber)?.boolValue == true && (value("updates.asked") as? NSNumber)?.boolValue == true,
+              "update toggle -> updates.check (and asked)")
+        check(int("weather.futureKnob") == 7, "unknown keys preserved after the update toggle")
+        store.setUpdateCheck(false)
+        check((value("updates.check") as? NSNumber)?.boolValue == false && (value("updates.asked") as? NSNumber)?.boolValue == true,
+              "update toggle off keeps asked")
+        store.actions?.checkForUpdates()
+        check(probe.commands.last == "checkForUpdates", "«Check now» -> checkForUpdates")
+        store.refreshUpdateStatus()
+        check(store.updateStatus.stage == .available, "status pulled from -updateStatusJSON after a check")
+        sw.updateStatusChanged(FakeUpdate.upToDate)
+        check(store.updateStatus.stage == .upToDate, "-updateStatusChanged: reaches the window")
+        sw.updateStatusChanged(FakeUpdate.available)
+        store.actions?.installUpdate()
+        check(probe.commands.last == "installUpdate", "«Update» -> installUpdate")
+        store.actions?.openUpdatePage()
+        check(probe.commands.last == "openUpdatePage", "«Download page» / «What's new» -> openUpdatePage")
+        store.page = .snow
+        sw.showPage("about")
+        check(store.page == .about, "-showPage: about")
+        sw.showPage("bogus")
+        check(store.page == .about, "-showPage: unknown name ignored")
+        store.page = .snow
+        sw.updateStatusChanged(FakeUpdate.idle)
+
         // Commands.
         store.actions?.clearSnow()
         store.resetPreview()
@@ -396,6 +476,37 @@ private final class SelfTestRunner {
         store.refreshDiagnostics()
         store.update { $0.system.language = .en }
         store.update { $0.system.uiTheme = .night }
+
+        // About page with updates: available (installable) in every theme, the other states in
+        // Night, Russian too; the header shows the «Version … available» badge.
+        store.page = .about
+        for theme in UITheme.allCases {
+            store.update { $0.system.uiTheme = theme }
+            sw.updateStatusChanged(FakeUpdate.available)
+            spin(0.35)
+            render(sw.contentView, "update-en-\(theme.rawValue)-about-available")
+        }
+        store.update { $0.system.uiTheme = .night }
+        for (name, json) in [("manual", FakeUpdate.manual), ("downloading", FakeUpdate.downloading),
+                             ("failed", FakeUpdate.failed), ("uptodate", FakeUpdate.upToDate), ("idle", FakeUpdate.idle)] {
+            sw.updateStatusChanged(json)
+            spin(0.35)
+            render(sw.contentView, "update-en-night-about-\(name)")
+        }
+        store.update { $0.system.language = .ru }
+        for (name, json) in [("available", FakeUpdate.available), ("manual", FakeUpdate.manual)] {
+            sw.updateStatusChanged(json)
+            spin(0.35)
+            render(sw.contentView, "update-ru-night-about-\(name)")
+        }
+        store.update { $0.system.uiTheme = .postcard }
+        sw.updateStatusChanged(FakeUpdate.available)
+        spin(0.35)
+        render(sw.contentView, "update-ru-postcard-about-available")
+        store.update { $0.system.uiTheme = .night }
+        store.update { $0.system.language = .en }
+        sw.updateStatusChanged(FakeUpdate.idle)
+
         store.page = .snow
         store.frozen = false
         spin(0.3)
@@ -477,6 +588,17 @@ private final class SelfTestRunner {
         render(host, "quickpanel-ru-postcard")
         store.update { $0.system.language = .en }
         store.update { $0.system.uiTheme = .night }
+        qp.updateStatusChanged(FakeUpdate.available)
+        spin(0.35)
+        check(store.updateStatus.hasNewer, "quick panel receives the update status")
+        render(host, "quickpanel-night-update")
+        store.update { $0.system.language = .ru }
+        spin(0.35)
+        render(host, "quickpanel-ru-night-update")
+        store.update { $0.system.language = .en }
+        qp.perform(.update)
+        check(probe.commands.last == "openUpdateInfo", "quick panel update badge -> openUpdateInfo")
+        qp.updateStatusChanged(FakeUpdate.idle)
         qp.perform(.settings)
         spin(0.3)
         check(probe.commands.last == "openSettings", "Settings… opens settings")

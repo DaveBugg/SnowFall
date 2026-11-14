@@ -79,6 +79,26 @@
     return out;
 }
 
+- (NSString*)updateStatusJSON {
+    return [NSString stringWithUTF8String:_host->updateStatusJson().c_str()] ?: @"{}";
+}
+
+- (void)checkForUpdates {
+    _host->checkForUpdates();
+}
+
+- (void)installUpdate {
+    _host->installUpdate();
+}
+
+- (void)openUpdatePage {
+    _host->openUpdatePage();
+}
+
+- (void)openUpdateInfo {
+    _host->openSettings("about");
+}
+
 - (NSView*)makePreviewView {
     return [[SFPreviewViewImpl alloc] initWithSettingsJSON:[NSString stringWithUTF8String:_host->settingsJson().c_str()]];
 }

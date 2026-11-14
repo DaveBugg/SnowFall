@@ -9,7 +9,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Every payload passed to -applySettingsJSON:, oldest first.
 @property (nonatomic, readonly) NSArray<NSString *> *appliedJSON;
 /// Names of the commands invoked so far: "clearSnow", "launchFireworks", "callSnowplow",
-/// "togglePause", "openSettings", "quitApp".
+/// "togglePause", "openSettings", "quitApp", "checkForUpdates", "installUpdate", "openUpdatePage",
+/// "openUpdateInfo".
 @property (nonatomic, readonly) NSArray<NSString *> *commands;
 /// How often -resetPreview / -setSettingsJSON: reached the preview view.
 @property (nonatomic, readonly) NSInteger previewResets;

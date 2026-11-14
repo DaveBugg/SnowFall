@@ -118,9 +118,14 @@ struct SettingsHeader: View {
                 .frame(width: 40, height: 40)
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(store.strings["AppName"]).font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .foregroundColor(p.headerText.c)
-                        .accessibilityAddTraits(.isHeader)
+                    HStack(alignment: .center, spacing: 10) {
+                        Text(store.strings["AppName"]).font(.system(size: 22, weight: .semibold, design: .rounded))
+                            .foregroundColor(p.headerText.c)
+                            .accessibilityAddTraits(.isHeader)
+                        if store.updateStatus.hasNewer {
+                            UpdateBadge(store: store, palette: p) { store.page = .about }
+                        }
+                    }
                     Text(store.holdHint(short: false)).font(.system(size: 12.5)).foregroundColor(p.headerTextSecondary.c)
                         .lineLimit(1).minimumScaleFactor(0.8)
                 }
@@ -136,6 +141,32 @@ struct SettingsHeader: View {
             .frame(height: SettingsLayout.headerContent + (p.garland ? 6 : 0), alignment: .center)
         }
         .frame(height: store.titlebarHeight + SettingsLayout.headerContent)
+    }
+}
+
+/// «Доступна версия 0.1.3» on the header: opens the About page (settings) / the settings (quick panel).
+struct UpdateBadge: View {
+    @ObservedObject var store: UIStore
+    let palette: Palette
+    let action: () -> Void
+
+    var body: some View {
+        let text = store.strings.format("HeaderUpdateFmt", store.updateStatus.latest)
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Circle().fill(palette.accent.c).frame(width: 7, height: 7)
+                Text(text).font(.system(size: 11.5, weight: .semibold)).foregroundColor(palette.headerText.c)
+                    .lineLimit(1).fixedSize()
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 22)
+            .background(Capsule().fill(palette.headerChip.c))
+            .overlay(Capsule().strokeBorder(palette.headerText.c(0.35), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(text)
+        .help(text)
     }
 }
 

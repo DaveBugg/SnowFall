@@ -4,7 +4,8 @@
 #
 # Targets
 #   snow_diag        logger backend (file + stderr) — replaces core's log_portable.cpp here
-#   snow_mac_core    pure C++ parts (tracker model, hotkey map, HLSL->MSL, drift mesh, icon art)
+#   snow_mac_core    pure C++ parts (tracker model, hotkey map, HLSL->MSL, drift mesh, icon art,
+#                    update signature / SHA-256 / install-location checks)
 #   snow_mac_tests   unit tests of snow_mac_core                       (ctest: mac_unit)
 #   SnowFall         SnowFall.app (LSUIElement, ad-hoc signed)          (ctest: mac_selftest)
 #   make_dmg         SnowFall-<version>.dmg (part of ALL unless -DSNOW_MAC_DMG=OFF)
@@ -49,12 +50,14 @@ add_library(snow_mac_core STATIC
   system/hotkey_map.cpp system/hotkey_map.h
   system/text_util.cpp system/text_util.h
   system/settings_store_mac.cpp
+  system/update_support.cpp system/update_support.h
   render/msl_translate.cpp render/msl_translate.h
   render/cursor_layout.cpp render/cursor_layout.h
   app/icon_render.cpp app/icon_render.h
   "${SNOW_DRIFT_MESH_SRC}")
 target_include_directories(snow_mac_core PUBLIC "${SNOW_MAC_DIR}" "${SNOW_CORE_DIR}" PRIVATE "${SNOW_SHIM_DIR}")
-target_link_libraries(snow_mac_core PUBLIC snow_sim snow_settings snow_diag)
+target_link_libraries(snow_mac_core PUBLIC snow_sim snow_settings snow_diag
+  "-framework Security" "-framework CoreFoundation")
 
 # ---- unit tests ----------------------------------------------------------------------------
 add_executable(snow_mac_tests tests/mac_unit_tests.cpp)
@@ -111,7 +114,7 @@ add_custom_command(TARGET SnowFall POST_BUILD
 
 # Self-test of the real app binary (Metal, windows, tracker, threads).
 add_test(NAME mac_selftest COMMAND "$<TARGET_FILE:SnowFall>" --selftest)
-set_tests_properties(mac_selftest PROPERTIES TIMEOUT 180)
+set_tests_properties(mac_selftest PROPERTIES TIMEOUT 300)
 
 if(SNOW_MAC_UI)
   target_compile_definitions(SnowFall PRIVATE SNOW_HAS_SWIFT_UI=1)

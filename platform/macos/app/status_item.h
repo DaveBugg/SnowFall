@@ -34,6 +34,7 @@ enum class MenuCommand {
     ReloadSettingsFile, // fallback UI only
     OpenLogFolder,
     Quit,
+    OpenUpdateInfo,     // «Доступно обновление …» -> settings on the About page
 };
 
 struct StatusMenuState {
@@ -48,6 +49,7 @@ struct StatusMenuState {
     std::string statusText;
     std::string holdKeys;         // "Ctrl+Option" or empty
     bool hasSettingsWindow = true;
+    std::string updateVersion;    // newer version available ("" = none)
     bool operator==(const StatusMenuState&) const = default;
 };
 
