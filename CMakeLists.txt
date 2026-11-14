@@ -12,7 +12,7 @@ if(CMAKE_HOST_APPLE OR EXISTS "/System/Library/CoreServices/SystemVersion.plist"
   endif()
 endif()
 
-project(SnowFall VERSION 0.1.1 LANGUAGES CXX)
+project(SnowFall VERSION 0.1.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,8 +28,8 @@ if(MSVC)
 else()
   add_compile_options(-Wall -Wextra)
 endif()
-# Version string shown in the app and the log: "0.1.1" for a build of the release tag
-# (v0.1.1 at HEAD, or a tag build in CI), otherwise "0.1.1+<commit>" so a test build is never
+# Version string shown in the app and the log: "0.1.2" for a build of the release tag
+# (v0.1.2 at HEAD, or a tag build in CI), otherwise "0.1.2+<commit>" so a test build is never
 # mistaken for the release. File names and bundle/installer version numbers stay numeric.
 set(SNOW_VERSION_STRING "${PROJECT_VERSION}")
 find_package(Git QUIET)

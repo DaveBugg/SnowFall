@@ -96,6 +96,12 @@ jobs:
         with:
           name: SnowFall-windows-x64
           path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: SnowFall-macos
+          path: dist-mac
+      # macOS: ship the dmg only (the app zip is for CI testing).
+      - run: cp dist-mac/*.dmg dist/ && ls -la dist
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*

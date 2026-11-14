@@ -5,8 +5,9 @@ taskbar, build up into drifts and travel with the windows. Brush the snow away, 
 it with a shovel, roll snowballs, throw them at windows, and build snowmen — by hand or by
 stacking balls. A toy snowplow clears the taskbar when it gets buried.
 
-**Platform:** Windows 11 x64 (native C++20, Win32 + Direct3D 11). A macOS port is planned —
-see [platform/macos](platform/macos/README.md).
+**Platforms:** Windows 11 x64 (native C++20, Win32 + Direct3D 11) and, as a first test build,
+macOS 13+ (Objective-C++, Metal, SwiftUI; Apple Silicon and Intel) — see
+[platform/macos](platform/macos/README.md).
 [Русская версия README](README.ru.md)
 
 ![Settings window, "Winter night" theme](docs/images/settings-night.png)
@@ -47,6 +48,16 @@ rights; uninstall from Settings → Apps), or the portable zip.
 
 > Builds are not code-signed yet, so Windows SmartScreen may warn on first launch.
 
+**macOS:** download `SnowFall-<version>.dmg` and drag SnowFall to Applications. The app is not
+notarized, so macOS refuses the first launch ("could not be verified" or "is damaged"). Either run
+
+```sh
+xattr -cr /Applications/SnowFall.app
+```
+
+or click "Done", then System Settings → Privacy & Security → "Open Anyway". Clicking the snow
+needs the Accessibility permission (the app asks the first time you hold Ctrl+Option).
+
 ## Build from source
 
 Requirements: Visual Studio 2022 Build Tools (MSVC x64, Windows SDK 10.0.22621+),
@@ -80,7 +91,7 @@ Tests read screen pixels only inside their own test windows.
 ```
 core/               portable C++20: simulation, drifts, tools, snowmen, settings model (no OS headers)
 platform/windows/   Win32 app, D3D11 overlay renderer, window tracker, UI, installer, packaging
-platform/macos/     planned port
+platform/macos/     macOS app: Metal overlay, window tracker, SwiftUI settings (test build)
 docs/               architecture, test plan, screenshots
 ```
 
