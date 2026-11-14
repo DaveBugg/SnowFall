@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3 — 2026-11-14
+
+- **Updates from GitHub Releases (Windows and macOS), opt-in.** On first start the app asks once
+  «Check for updates?» — one request a day for the latest version number, no data about you.
+  Settings → About → Updates: toggle, «Check now», «Update», «What's new», release page. A badge in
+  the settings header and a tray / menu-bar item appear when a new version is out.
+- Updates install only files listed in `SHA256SUMS` signed with the release key (ECDSA P-256);
+  downloads come only from this repository's GitHub releases. Windows runs the installer silently
+  and keeps the autostart / shortcut choices; macOS checks the code signature, swaps the app and
+  restarts it. Without the update permission the app makes no network requests at all.
+- Releases now ship `SHA256SUMS` and `SHA256SUMS.sig`.
+
 ## 0.1.2 — 2026-11-14
 
 - **macOS (first test build, macOS 13+, universal Apple Silicon + Intel):** `SnowFall-0.1.2.dmg`.
